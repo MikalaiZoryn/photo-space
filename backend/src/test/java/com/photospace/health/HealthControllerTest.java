@@ -3,6 +3,7 @@ package com.photospace.health;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
+import com.photospace.workspaces.WorkspaceService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -18,6 +19,10 @@ class HealthControllerTest {
 
     @MockitoBean
     private DatabaseProbe databaseProbe;
+
+    // The MVC slice loads every WebMvcConfigurer, including the workspace authorization interceptor's.
+    @MockitoBean
+    private WorkspaceService workspaceService;
 
     @Test
     void reportsUpWhenDatabaseIsReachable() {

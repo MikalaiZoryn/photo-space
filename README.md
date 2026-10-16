@@ -45,11 +45,50 @@ docker compose up -d --wait               # PostgreSQL 18 on 127.0.0.1:5432
 (cd frontend && npm install && npm run dev)  # UI on http://localhost:5173; /api is proxied to :8080
 ```
 
-Open http://localhost:5173. The page should show "Backend UP, database UP".
+Open http://localhost:5173. Without Google credentials the page shows "No sign-in method is configured". Use one of the two sign-in options below. The system status line at the bottom should show "Backend UP, database UP".
 
 - Stop the database with `docker compose down`. Add `-v` to also wipe the data volume, which gives you a clean database.
 - If port 5432 is taken, set `POSTGRES_PORT` and `DB_URL`. `.env.example` lists the variables.
-- To run without Compose, `(cd backend && ./mvnw spring-boot:test-run)` starts the backend against a throwaway Testcontainers PostgreSQL.
+- To run without Compose, `(cd backend && ./mvnw spring-boot:test-run)` starts the backend against a throwaway Testcontainers PostgreSQL, with dev sign-in enabled.
+
+### Signing in locally
+
+Pick one of these options. Both use the same server-side session, CSRF, and workspace checks.
+
+**Option A: dev sign-in (no Google credentials needed).** Run the backend from the test classpath instead of `spring-boot:run`:
+
+```bash
+(cd backend && ./mvnw spring-boot:test-run -Dspring-boot.run.profiles=compose-db)  # compose.yaml database
+(cd backend && ./mvnw spring-boot:test-run)                                        # throwaway Testcontainers database
+```
+
+The sign-in page then shows a "Development sign-in" form. Any email works, with no password. Each email is a separate user, so two emails let you try cross-workspace access. This code lives only in `backend/src/test` and is never packaged into the application jar (D8 in `docs/decisions.md`).
+
+**Option B: real Google sign-in.**
+
+1. In Google Cloud Console, create an OAuth client ID of type "Web application". Add the authorized redirect URI `http://localhost:5173/api/auth/oauth2/callback/google`.
+2. Copy `.env.example` to `.env` (it is git-ignored) and set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+3. Start the backend with those variables: `set -a; source .env; set +a; (cd backend && ./mvnw spring-boot:run)`.
+4. Use the app through http://localhost:5173 so the redirect URI matches.
+
+Sign-in asks only for `openid email`. Gmail and Calendar access will be separate opt-in connections later.
+
+The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhost`. For Safari, set `SESSION_COOKIE_SECURE=false` locally.
+
+### API (Milestone 2)
+
+| Endpoint | Access |
+| --- | --- |
+| `GET /api/auth/options` | Public. Lists the available sign-in methods. |
+| `GET /api/auth/csrf` | Public. Sets the `XSRF-TOKEN` cookie. |
+| `GET /api/auth/oauth2/authorization/google` | Public. Starts Google sign-in (browser navigation). |
+| `POST /api/auth/logout` | Signed in, with CSRF. Ends the session (204). |
+| `GET /api/me` | Signed in. Returns the current user. |
+| `GET /api/workspaces`, `POST /api/workspaces` | Signed in. Lists your workspaces, or creates one with you as owner. |
+| `GET /api/workspaces/{id}`, `GET /api/workspaces/{id}/members` | Workspace members. Everyone else gets 404. |
+| `PUT /api/workspaces/{id}` | Workspace owners (members get 403, non-members get 404). |
+
+Unauthenticated calls get a 401 problem body. State-changing calls need the `X-XSRF-TOKEN` header, which must match the `XSRF-TOKEN` cookie. Every response carries an `X-Correlation-Id` header, and error bodies include the same `correlationId`. All workspace-owned APIs must live under `/api/workspaces/{workspaceId}/`, where one central check enforces membership (see D8).
 
 ### Health endpoints
 
@@ -66,7 +105,7 @@ cd frontend && npm ci && npm run lint && npm run typecheck && npm test && npm ru
 ```
 
 - Backend unit tests only: `./mvnw test`.
-- Integration tests are the `*IT.java` classes. Each starts a clean PostgreSQL 18 container and runs every Flyway migration from scratch.
+- Integration tests are the `*IT.java` classes. They share one application context and one clean PostgreSQL 18 container, and run every Flyway migration from scratch. They talk to the app over real HTTP with session and CSRF cookies (`support/ApiClient`).
 - Frontend tests in watch mode: `npm run test:watch`.
 
 ### Database migrations

@@ -8,6 +8,17 @@ spring:
     password: ${DB_PASSWORD:photospace}
   flyway:
     locations: classpath:db/migration
+  session:
+    # Server-side sessions live in PostgreSQL (V3 migration); Flyway owns the schema.
+    jdbc:
+      initialize-schema: never
+
+app:
+  auth:
+    # Google sign-in is enabled only when both are set. Never commit real values; see .env.example.
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
 
 management:
   endpoints:
@@ -21,6 +32,21 @@ management:
         enabled: true
 
 server:
+  servlet:
+    session:
+      timeout: 12h
+      cookie:
+        name: SESSION
+        http-only: true
+        # Browsers accept Secure cookies on http://localhost. Set SESSION_COOKIE_SECURE=false only for local
+        # browsers that do not (for example Safari).
+        secure: ${SESSION_COOKIE_SECURE:true}
+        # Lax, not Strict: the Google callback is a cross-site top-level redirect that needs the session cookie.
+        same-site: lax
   error:
     include-stacktrace: never
     include-message: never
+
+logging:
+  pattern:
+    correlation: "[%X{correlationId:-}] "

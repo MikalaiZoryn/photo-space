@@ -1,54 +1,184 @@
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.tsx'
+import { clearCookie, headersOf, json, mockApi, noContent, setCookie } from './test/mockApi.ts'
 
-function mockFetch(response: Response | Error) {
-  const fn = vi.fn(() => (response instanceof Error ? Promise.reject(response) : Promise.resolve(response)))
-  vi.stubGlobal('fetch', fn)
-  return fn
+const me = { id: 'user-1', displayName: 'alice@example.com', email: 'alice@example.com' }
+const health = () => json({ status: 'UP', database: 'UP' })
+const unauthorized = () => json({ status: 401, title: 'Unauthorized' }, 401)
+const options = (googleSignInUrl: string | null, devLogin: boolean) => () => json({ googleSignInUrl, devLogin })
+
+function workspace(id: string, name: string) {
+  return { id, name, timezone: 'Europe/Warsaw', role: 'OWNER', createdAt: '2026-10-15T10:00:00Z' }
 }
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+function members() {
+  return json([{ userId: 'user-1', displayName: 'alice@example.com', role: 'OWNER', joinedAt: '2026-10-15T10:00:00Z' }])
 }
 
 describe('App', () => {
+  beforeEach(() => {
+    setCookie('XSRF-TOKEN=csrf-token')
+  })
+
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    clearCookie('XSRF-TOKEN')
+    window.localStorage.clear()
+    window.history.replaceState(null, '', '/')
   })
 
-  it('shows backend and database status from /api/health', async () => {
-    const fetch = mockFetch(json({ status: 'UP', database: 'UP' }))
+  it('offers Google sign-in when signed out', async () => {
+    mockApi({
+      'GET /api/me': unauthorized,
+      'GET /api/auth/options': options('/api/auth/oauth2/authorization/google', false),
+      'GET /api/health': health,
+    })
 
     render(<App />)
 
-    expect(screen.getByRole('status').textContent).toBe('Checking backend…')
-    expect(await screen.findByText('Backend UP, database UP')).toBeTruthy()
-    expect(fetch).toHaveBeenCalledWith('/api/health', expect.anything())
+    const link = await screen.findByRole('link', { name: 'Sign in with Google' })
+    expect(link.getAttribute('href')).toBe('/api/auth/oauth2/authorization/google')
+    expect(screen.queryByRole('form', { name: 'Development sign-in' })).toBeNull()
   })
 
-  it('shows a degraded state when the backend reports the database down', async () => {
-    mockFetch(json({ status: 'DOWN', database: 'DOWN' }, 503))
+  it('explains when no sign-in method is configured', async () => {
+    mockApi({ 'GET /api/me': unauthorized, 'GET /api/auth/options': options(null, false), 'GET /api/health': health })
 
     render(<App />)
 
-    expect(await screen.findByText('Backend DOWN, database DOWN')).toBeTruthy()
+    expect(await screen.findByText(/No sign-in method is configured/)).toBeTruthy()
   })
 
-  it('shows an error when the backend cannot be reached', async () => {
-    mockFetch(new TypeError('Failed to fetch'))
+  it('shows a sign-in error after a failed Google callback', async () => {
+    window.history.replaceState(null, '', '/?signInError')
+    mockApi({
+      'GET /api/me': unauthorized,
+      'GET /api/auth/options': options('/api/auth/oauth2/authorization/google', false),
+      'GET /api/health': health,
+    })
 
     render(<App />)
 
-    expect(await screen.findByText('Backend unreachable')).toBeTruthy()
+    expect(await screen.findByText('Sign-in did not complete. Please try again.')).toBeTruthy()
+    expect(window.location.search).toBe('')
   })
 
-  it('shows an error on unexpected HTTP failures', async () => {
-    mockFetch(new Response('Bad gateway', { status: 502 }))
+  it('signs in with the dev form and onboards the first workspace', async () => {
+    let signedIn = false
+    let workspaces: unknown[] = []
+    const fetch = mockApi({
+      'GET /api/me': () => (signedIn ? json(me) : unauthorized()),
+      'GET /api/auth/options': options(null, true),
+      'GET /api/health': health,
+      'POST /api/dev/login': () => {
+        signedIn = true
+        return noContent()
+      },
+      'GET /api/workspaces': () => json(workspaces),
+      'POST /api/workspaces': (init) => {
+        const body = JSON.parse(String(init?.body)) as { name: string }
+        const created = workspace('ws-1', body.name)
+        workspaces = [created]
+        return json(created, 201)
+      },
+      'GET /api/workspaces/ws-1/members': members,
+    })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in (dev)' }))
+
+    expect(await screen.findByRole('heading', { name: 'Create your workspace' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Business name'), { target: { value: 'Alice Studio' } })
+    fireEvent.change(screen.getByLabelText('Time zone'), { target: { value: 'Europe/Warsaw' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
+
+    expect(await screen.findByRole('heading', { name: 'Alice Studio' })).toBeTruthy()
+    expect(await screen.findByText('alice@example.com (owner)')).toBeTruthy()
+    expect(headersOf(fetch, 'POST', '/api/workspaces')['X-XSRF-TOKEN']).toBe('csrf-token')
+    expect(JSON.parse(String(fetch.mock.calls.find(([p, i]) => p === '/api/workspaces' && i?.method === 'POST')?.[1]?.body)))
+      .toEqual({ name: 'Alice Studio', timezone: 'Europe/Warsaw' })
+  })
+
+  it('shows validation errors from the server', async () => {
+    mockApi({
+      'GET /api/me': () => json(me),
+      'GET /api/auth/options': options(null, false),
+      'GET /api/health': health,
+      'GET /api/workspaces': () => json([]),
+      'POST /api/workspaces': () =>
+        json({ status: 400, title: 'Bad Request', errors: { timezone: 'must be an IANA time zone' } }, 400),
+    })
+
+    render(<App />)
+    fireEvent.change(await screen.findByLabelText('Business name'), { target: { value: 'Studio' } })
+    fireEvent.change(screen.getByLabelText('Time zone'), { target: { value: 'Mars/Base' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
+
+    expect(await screen.findByText('Time zone must be an IANA time zone')).toBeTruthy()
+  })
+
+  it('opens the last selected workspace and switches between workspaces', async () => {
+    window.localStorage.setItem('photospace.selectedWorkspace', 'ws-2')
+    mockApi({
+      'GET /api/me': () => json(me),
+      'GET /api/auth/options': options(null, false),
+      'GET /api/health': health,
+      'GET /api/workspaces': () => json([workspace('ws-1', 'Alpha'), workspace('ws-2', 'Beta')]),
+      'GET /api/workspaces/ws-1/members': members,
+      'GET /api/workspaces/ws-2/members': members,
+    })
 
     render(<App />)
 
-    expect(await screen.findByText('Backend unreachable')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Beta' })).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-1' } })
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeTruthy()
+    expect(window.localStorage.getItem('photospace.selectedWorkspace')).toBe('ws-1')
+  })
+
+  it('falls back to the first workspace when the stored one is no longer available', async () => {
+    window.localStorage.setItem('photospace.selectedWorkspace', 'gone')
+    mockApi({
+      'GET /api/me': () => json(me),
+      'GET /api/auth/options': options(null, false),
+      'GET /api/health': health,
+      'GET /api/workspaces': () => json([workspace('ws-1', 'Alpha')]),
+      'GET /api/workspaces/ws-1/members': members,
+    })
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeTruthy()
+  })
+
+  it('signs out and returns to the sign-in page', async () => {
+    let signedIn = true
+    const fetch = mockApi({
+      'GET /api/me': () => (signedIn ? json(me) : unauthorized()),
+      'GET /api/auth/options': options('/api/auth/oauth2/authorization/google', false),
+      'GET /api/health': health,
+      'GET /api/workspaces': () => json([]),
+      'POST /api/auth/logout': () => {
+        signedIn = false
+        return noContent()
+      },
+    })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+
+    expect(await screen.findByRole('link', { name: 'Sign in with Google' })).toBeTruthy()
+    expect(headersOf(fetch, 'POST', '/api/auth/logout')['X-XSRF-TOKEN']).toBe('csrf-token')
+  })
+
+  it('shows a retryable error when the backend is unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))))
+
+    render(<App />)
+
+    expect(await screen.findByText(/Could not reach the server/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
   })
 })
