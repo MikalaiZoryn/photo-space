@@ -23,4 +23,11 @@ final class FileNames {
         String result = clean.toString().replaceAll(" {2,}", " ").strip();
         return result.isEmpty() || result.equals(".") || result.equals("..") ? null : result;
     }
+
+    /** The download name of a photo's preview: {@code IMG_0042.JPG} becomes {@code IMG_0042-preview.jpg}. */
+    static String previewOf(String displayName) {
+        int dot = displayName.lastIndexOf('.');
+        String stem = dot > 0 ? displayName.substring(0, dot) : displayName;
+        return stem + "-preview.jpg";
+    }
 }

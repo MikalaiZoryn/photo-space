@@ -82,6 +82,18 @@ public class WorkspaceService {
                 .orElseThrow(NotFoundException::new);
     }
 
+    /**
+     * The workspace's name, which gallery visitors see as the studio's name. For callers that authorized access
+     * to the workspace some other way than membership, such as a gallery share link.
+     */
+    @Transactional(readOnly = true)
+    public Optional<String> name(UUID workspaceId) {
+        return jdbc.sql("SELECT name FROM workspaces WHERE id = :workspaceId")
+                .param("workspaceId", workspaceId)
+                .query(String.class)
+                .optional();
+    }
+
     /** The workspace's time zone, in which session times are entered and shown. */
     @Transactional(readOnly = true)
     public ZoneId zone(WorkspaceContext workspace) {

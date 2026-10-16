@@ -175,13 +175,20 @@ Suggested tables (fields are indicative; refine during implementation):
     (`PENDING_UPLOAD`, `PROCESSING`, `READY`, `REJECTED`, `FAILED`),
     safe failure reason, timestamps. (Implemented in Milestone 4; see
     D11.)
--   `galleries`: `id`, `workspace_id`, optional `session_id`, title,
-    status, expiry/settings, timestamps.
--   `gallery_assets`: `gallery_id`, `asset_id`, sort order, download
-    policy; enforce workspace consistency.
--   `gallery_share_tokens`: token hash, gallery ID, expiry, revoked
-    timestamp, created timestamp. Store token hashes, not raw long-lived
-    tokens.
+-   `galleries`: `id`, `workspace_id`, `session_id` (composite foreign
+    key), title, status (`DRAFT`, `PUBLISHED`), download setting
+    (`NONE`, `PREVIEWS`, `ORIGINALS`), archived timestamp, version,
+    timestamps. (Implemented in Milestone 5; see D14.)
+-   `gallery_assets`: `gallery_id`, `asset_id`, position. Composite
+    foreign keys on `(workspace_id, session_id, …)` make every photo
+    belong to the gallery's own session and workspace. The download
+    setting is per gallery, not per photo.
+-   `gallery_share_links`: SHA-256 token hash, gallery ID, required
+    expiry, revoked timestamp and user, creating user, created
+    timestamp. The raw token is never stored.
+-   `gallery_access_events`: link ID, kind (`VIEW`, `DOWNLOAD`),
+    downloaded asset ID, timestamp. No visitor data (IP address, user
+    agent).
 -   `tasks`: `id`, `workspace_id`, optional client/session links, title,
     description, due date, status, assignee, source, timestamps.
 -   `content_batches`: `id`, `workspace_id`, optional session ID, input
@@ -267,6 +274,32 @@ helpful. Ensure orphaned uploads are cleaned up.
     access/download events.
 -   Never expose permanent public object URLs.
 -   Plan for deletion, retention, export, and link revocation.
+
+Milestone 5 implements this (D14). Visitors open `#/g/<token>` in the
+SPA; the token stays in the URL fragment and is sent to the API only in
+the `X-Gallery-Token` header of `/api/public/gallery` requests.
+
+### Retention and deletion of gallery data
+
+-   **Galleries never own photos.** Removing a photo from a gallery
+    deletes only the association. Archiving a gallery closes it to
+    visitors and keeps everything. The original, preview, and
+    thumbnail stay in storage as long as the photo asset exists.
+-   **Photo deletion is not built yet** (out of Milestone 5). When it
+    is, deleting an asset removes it from every gallery (`ON DELETE
+    CASCADE` on `gallery_assets`), and the object deletes follow the
+    abandoned-upload cleanup's order: object first, then row. With
+    bucket versioning, deleted objects stay recoverable as noncurrent
+    versions for 30 days, then expire.
+-   **Share links are revoked, never deleted.** An expired or revoked
+    link keeps its row and access history. Neither contains the token.
+-   **Access events** keep only link, kind, photo, and time. They are
+    kept for the gallery's lifetime. Deleting a workspace deletes its
+    galleries, links, and events by cascade.
+-   **Unpublishing, archiving, expiry, and revocation take effect on
+    the next request.** Presigned URLs already issued (at most 10
+    minutes for previews, 5 minutes for downloads) keep working until
+    they expire. This is the accepted window for "revoked".
 
 ## 9. Background jobs and event handling
 

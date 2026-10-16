@@ -29,4 +29,12 @@ class FileNamesTest {
         assertThat(FileNames.forDisplay("\u0001\u202E")).isNull();
         assertThat(FileNames.forDisplay("..")).isNull();
     }
+
+    @Test
+    void namesPreviewsAfterTheOriginal() {
+        assertThat(FileNames.previewOf("IMG_0042.JPG")).isEqualTo("IMG_0042-preview.jpg");
+        assertThat(FileNames.previewOf("family.session.png")).isEqualTo("family.session-preview.jpg");
+        assertThat(FileNames.previewOf("no-extension")).isEqualTo("no-extension-preview.jpg");
+        assertThat(FileNames.previewOf(".hidden")).isEqualTo(".hidden-preview.jpg");
+    }
 }

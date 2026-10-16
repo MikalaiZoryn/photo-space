@@ -23,6 +23,12 @@ public interface ObjectStorage {
     /** A URL that lets the holder {@code GET} one object until it expires. */
     URI presignDownload(String key, Duration validFor);
 
+    /**
+     * A URL that lets the holder {@code GET} one object as a file download until it expires. The browser saves it
+     * as {@code filename} and is told its type is {@code contentType}; both are part of the signature.
+     */
+    URI presignAttachment(String key, String filename, String contentType, Duration validFor);
+
     /** The object's size in bytes, or empty if there is no such object. */
     Optional<Long> size(String key);
 

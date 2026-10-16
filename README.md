@@ -101,6 +101,16 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `POST /api/workspaces/{id}/sessions/{sessionId}/assets` | Members. Starts an upload: `{filename, contentType, byteSize}`. Returns `{asset, upload: {url, method, headers, expiresAt}}`. |
 | `GET /api/workspaces/{id}/assets/{assetId}` | Members. One photo with its status, and thumbnail and preview URLs once `READY`. |
 | `POST /api/workspaces/{id}/assets/{assetId}/complete` | Members. Reports that the upload finished, which starts processing. Idempotent; 409 if the file is not in storage yet. |
+| `GET /api/workspaces/{id}/galleries?sessionId=&archived=false&page=0&size=25` | Members. Newest first, with `photoCount`. |
+| `POST /api/workspaces/{id}/galleries` | Members. Creates a draft: `{sessionId, gallery: {title, downloads}}`. |
+| `GET`, `PUT /api/workspaces/{id}/galleries/{galleryId}` | Members. Returns `{gallery, photos}`. `PUT` takes `{version, gallery: {title, downloads}}`. |
+| `PUT /api/workspaces/{id}/galleries/{galleryId}/photos` | Members. `{version, assetIds}`: the whole ordered list of ready photos of the gallery's session. |
+| `POST /api/workspaces/{id}/galleries/{galleryId}/status` | Members. `{status: "DRAFT" \| "PUBLISHED"}`. |
+| `POST /api/workspaces/{id}/galleries/{galleryId}/archive`, `…/restore` | Members. Idempotent. |
+| `GET`, `POST /api/workspaces/{id}/galleries/{galleryId}/links` | Members. `POST {validDays}` (1–365) returns `{link, token}`; the token is shown only this once. |
+| `POST /api/workspaces/{id}/galleries/{galleryId}/links/{linkId}/revoke` | Members. Idempotent. |
+| `GET /api/public/gallery` | Gallery visitors, with the `X-Gallery-Token` header. The gallery the link opens. |
+| `POST /api/public/gallery/photos/{assetId}/download` | Gallery visitors, with the token header and CSRF. Returns `{url, expiresAt}` when the gallery allows downloads. |
 
 Unauthenticated calls get a 401 problem body. State-changing calls need the `X-XSRF-TOKEN` header, which must match the `XSRF-TOKEN` cookie. Every response carries an `X-Correlation-Id` header, and error bodies include the same `correlationId`. All workspace-owned APIs must live under `/api/workspaces/{workspaceId}/`, where one central check enforces membership (see D8).
 
@@ -119,6 +129,14 @@ Photo uploads (D11 and D12):
 - Asset status: `PENDING_UPLOAD → PROCESSING → READY`, or `REJECTED` (not a valid photo; `failureReason` says why and the original is deleted) or `FAILED` (processing kept failing after 5 attempts).
 - `thumbnailUrl` (480 px) and `previewUrl` (2048 px) are presigned and expire after 10 minutes; fetch the asset again for fresh ones. The original never has a URL here.
 - Uploads not completed within 24 hours are deleted.
+
+Galleries and share links (D14):
+
+- A gallery holds ready photos of one session, in order. `downloads` is `NONE` (view only), `PREVIEWS` (2048 px JPEG), or `ORIGINALS`. Links open a gallery only while it is `PUBLISHED` and not archived.
+- A link's token is returned once and only its SHA-256 is stored. A lost link is replaced, not recovered. Links expire after 1–365 days and can be revoked.
+- Clients open `/#/g/<token>`. The token stays in the URL fragment and reaches the API only in the `X-Gallery-Token` header. Every link that doesn't work gets the same 404.
+- Visitor image URLs expire after 10 minutes and download URLs after 5. Views and downloads are counted per link, with no visitor data.
+- Removing a photo from a gallery, or archiving a gallery, never deletes the photo. See ARCHITECTURE §8 for retention and deletion.
 
 ### Clients and sessions: a quick manual check
 
@@ -140,6 +158,17 @@ With the stack running and dev sign-in:
 5. In another user's window, the session URL shows "not found", and the API returns 404 for the photo list.
 
 To see the jobs behind this: `docker compose exec postgres psql -U photospace -c "SELECT job_type, status, attempts, last_error FROM background_jobs ORDER BY created_at DESC LIMIT 5"`.
+
+### Galleries: a quick manual check
+
+With the stack running, dev sign-in, and a session with a few ready photos:
+
+1. On the session page, under **Galleries**, choose **New gallery**. Set a title and **Full-resolution originals**, then **Create gallery**.
+2. On the gallery page, **Add all**, then reorder with the arrows and remove one. Choose **Publish**.
+3. Under **Share links**, pick 7 days and **Create link**. Copy the URL; it is not shown again.
+4. Open the URL in a private window. The gallery shows without sign-in, in your order, and **Download original** saves the file under its uploaded name.
+5. Back in the first window, **Unpublish**. Reloading the private window shows "This gallery link does not work". **Publish** again, and it works again. **Revoke** the link, and it stops for good. The link list shows its views and downloads.
+6. In another user's window, the gallery URL shows "not found".
 
 ### Health endpoints
 

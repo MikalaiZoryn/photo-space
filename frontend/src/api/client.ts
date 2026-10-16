@@ -42,6 +42,8 @@ type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
   signal?: AbortSignal
+  /** Extra request headers, such as a gallery visitor's share token. */
+  headers?: Record<string, string>
 }
 
 const CSRF_COOKIE = 'XSRF-TOKEN'
@@ -51,8 +53,11 @@ const CSRF_HEADER = 'X-XSRF-TOKEN'
  * Calls the backend same-origin with the session cookie. State-changing requests send the CSRF token from
  * the XSRF-TOKEN cookie back in a header, fetching the cookie first if the backend has not set it yet.
  */
-export async function api<T>(path: string, { method = 'GET', body, signal }: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
+export async function api<T>(
+  path: string,
+  { method = 'GET', body, signal, headers: extraHeaders }: RequestOptions = {},
+): Promise<T> {
+  const headers: Record<string, string> = { ...extraHeaders, Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET') headers[CSRF_HEADER] = await csrfToken(signal)
 
