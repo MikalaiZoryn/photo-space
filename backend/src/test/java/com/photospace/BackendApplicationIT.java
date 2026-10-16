@@ -7,16 +7,16 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.UUID;
+import com.photospace.support.ApiClient;
+import com.photospace.support.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /** Boots the full application against a clean PostgreSQL container. */
-@Import(TestcontainersConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@IntegrationTest
 class BackendApplicationIT {
 
     private final HttpClient http = HttpClient.newHttpClient();
@@ -31,11 +31,11 @@ class BackendApplicationIT {
     void flywayAppliesAllMigrationsToCleanDatabase() {
         List<String> failed = jdbc.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success = false", String.class);
-        Integer applied = jdbc.queryForObject(
-                "SELECT count(*) FROM flyway_schema_history WHERE version = '1' AND success", Integer.class);
+        List<String> applied = jdbc.queryForList(
+                "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class);
 
         assertThat(failed).isEmpty();
-        assertThat(applied).isEqualTo(1);
+        assertThat(applied).containsExactly("1", "2", "3");
     }
 
     @Test
@@ -58,7 +58,10 @@ class BackendApplicationIT {
 
     @Test
     void otherActuatorEndpointsAreNotExposed() throws Exception {
-        assertThat(get("/actuator/env").statusCode()).isEqualTo(404);
+        // Anonymous callers are stopped by security first; even a signed-in user finds nothing there.
+        assertThat(get("/actuator/env").statusCode()).isEqualTo(401);
+        ApiClient signedIn = new ApiClient(port).signIn("actuator-" + UUID.randomUUID() + "@example.com");
+        assertThat(signedIn.get("/actuator/env").status()).isEqualTo(404);
     }
 
     private HttpResponse<String> get(String path) throws Exception {

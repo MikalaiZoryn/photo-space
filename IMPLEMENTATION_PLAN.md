@@ -477,7 +477,101 @@ sequentially and keep each change small enough to review and test.
         30s connection timeout before it returns 503. Tune this in
         Milestone 8.
 
-### Milestone 2: next
+### Milestone 2: done (2026-10-15)
 
-Identity, workspaces, and authorization (Google OIDC and server-side
-sessions).
+-   **Schema:** `V2__identity_and_workspaces.sql` adds `users`,
+    `external_identities` (unique `provider` + `subject`),
+    `workspaces`, and `workspace_members` (unique `workspace_id` +
+    `user_id`, role `OWNER`/`MEMBER`). `V3__spring_session.sql` adds
+    the Spring Session JDBC tables.
+-   **Sign-in** (`identity` module): Spring Security `oauth2Login`
+    with Google, scopes `openid email` only. Spring Security validates
+    state, nonce, and the ID token. Users are provisioned by Google
+    `sub`. After sign-in the session holds only a
+    `SignedInUser(userId)`; ID and access tokens are not stored.
+    Google is enabled only when `GOOGLE_CLIENT_ID` and
+    `GOOGLE_CLIENT_SECRET` are set.
+-   **Sessions:** stored server-side in PostgreSQL (Spring Session
+    JDBC). The cookie is `HttpOnly`, `Secure`, and `SameSite=Lax`, with
+    a 12-hour idle timeout, and the session ID rotates at sign-in.
+    CSRF uses SPA cookie-to-header mode. Unauthenticated calls get a
+    401 problem body, never a redirect, and create no session.
+    Sign-out is `POST /api/auth/logout`.
+-   **Authorization** (`workspaces` module): every workspace-owned
+    API lives under `/api/workspaces/{workspaceId}/…`, and one
+    interceptor checks membership. It fails closed: foreign, unknown,
+    and malformed IDs all return 404. Handlers take the verified
+    `WorkspaceContext`. Owner-only actions return 403 to members.
+    `ApiRouteAuthorizationIT` fails the build for any new `/api` route
+    outside the allowlist or the workspace prefix.
+-   **Dev sign-in** for working without Google credentials: in
+    `src/test` only, run through `./mvnw spring-boot:test-run`. It is
+    never packaged, so it cannot be enabled in production.
+-   **Cross-cutting:** a correlation-ID filter (`X-Correlation-Id`
+    header, MDC, log pattern) and RFC 9457 problem responses that
+    include `correlationId` and per-field validation `errors`.
+-   **Frontend:** sign-in page (Google link, dev form, failed-sign-in
+    notice), onboarding to create the first workspace (with the
+    browser time zone as default), a workspace selector remembered in
+    localStorage, a workspace page with members, and sign-out. The
+    `fetch` wrapper `src/api/client.ts` adds the CSRF header. No new
+    frontend dependencies.
+-   **Backend dependencies added:** security, oauth2-client,
+    session-jdbc, and validation starters.
+-   **Decisions:** D6 (authentication and sessions), D7 (`JdbcClient`
+    instead of JPA), and D8 (central workspace authorization and dev
+    sign-in).
+-   **Verified locally on 2026-10-15:**
+    -   `cd backend && ./mvnw verify`: 4 unit tests and 27 integration
+        tests passed.
+        -   `AuthenticationIT`: 401s with no session created, CSRF
+            required, cookie attributes, session row in PostgreSQL,
+            session ID rotation, sign-out invalidates the session,
+            Google redirect has only `openid email` plus state and
+            nonce, and a forged-state callback is rejected.
+        -   `WorkspaceIsolationIT`: cross-workspace read, list, and
+            update denial; foreign, unknown, and malformed IDs are
+            indistinguishable; members get 403 on owner actions;
+            validation errors; client-supplied IDs and roles are
+            ignored.
+        -   `IdentityServiceIT`: identity keyed on `sub`, not email.
+        -   `ApiRouteAuthorizationIT`: the route guard.
+        -   `OidcLoginSuccessHandlerTest`: only the user ID reaches
+            the session.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 17 tests passed and the build succeeded.
+    -   Manual run, `spring-boot:test-run -Dspring-boot.run.profiles=compose-db`
+        plus `npm run dev`, all through the Vite proxy:
+        -   The Compose database migrated from V1 to V3.
+        -   Dev sign-in, create workspace (403 without CSRF, 201
+            with it), list members, then sign-out (the old session
+            returns 401).
+        -   A second user got 404 with a correlation ID for the first
+            user's workspace.
+        -   With a fake Google client ID, the authorization redirect
+            used `redirect_uri=http://localhost:5173/api/auth/oauth2/callback/google`
+            with `scope=openid email`, and a forged callback
+            redirected to `/?signInError`.
+        -   The client secret never appeared in logs, and the
+            session row held only the security context.
+    -   Fixed during verification: Vite's string proxy shorthand sets
+        `changeOrigin: true`, which made the Google redirect URI point
+        at `:8080`. The proxy now keeps the `Host` header.
+-   **Known gaps:**
+    -   A real Google account sign-in has not been completed: no OAuth
+        client credentials were available here. Everything up to the
+        redirect to Google, and the callback rejection path, is
+        verified. Follow README "Option B" to verify it with real
+        credentials.
+    -   Inviting members to a workspace is not built; the
+        `MEMBER` role is exercised only through tests.
+    -   Logs are plain text with correlation IDs. JSON structured logs
+        come with deployment (Milestone 8).
+    -   Forwarded-header handling for the public HTTPS origin behind a
+        load balancer is left to Milestone 8 (see D6).
+    -   No rate limiting on sign-in endpoints yet (Milestone 8 or 11).
+
+### Milestone 3: next
+
+Clients and photography sessions, scoped under
+`/api/workspaces/{workspaceId}/`.
