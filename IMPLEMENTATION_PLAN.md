@@ -691,8 +691,154 @@ sequentially and keep each change small enough to review and test.
         the first sensitive approvals; `POST …/status` is the single
         hook point.
 
-### Milestone 4: next
+### Milestone 4: done (2026-10-16)
 
-Secure photo upload and processing: asset metadata, a private S3
-bucket through CDK, presigned uploads, and an asynchronous processing
-worker.
+-   **Schema:** `V5__photo_assets_and_jobs.sql` adds `photo_assets`
+    and `background_jobs`. An asset's session uses a composite foreign
+    key `(workspace_id, session_id)`. CHECK constraints require
+    derivatives, checksum, and dimensions once `READY`, and a failure
+    reason exactly when `REJECTED` or `FAILED`. Jobs have a unique
+    idempotency key.
+-   **Uploads** (`assets` module, D11):
+    `POST …/sessions/{id}/assets` checks the session (archived → 409),
+    type (JPEG/PNG), size (100 MB), file name, unfinished uploads (100
+    per workspace), and storage quota (100 GB). Limits are checked
+    under a per-workspace advisory lock. It records a `PENDING_UPLOAD`
+    asset and returns a 15-minute presigned `PUT` for a
+    server-generated key, with `Content-Type` and `Content-Length`
+    signed. `POST …/assets/{id}/complete` checks the object exists,
+    then moves the asset to `PROCESSING` and queues its job in the
+    same transaction. It is idempotent. List and get return 10-minute
+    presigned thumbnail and preview URLs for `READY` assets only. No
+    URL for an original is ever returned.
+-   **Processing** (`ProcessAssetJob`): checks the stored size against
+    the declared one and computes SHA-256. It sniffs the type from
+    magic bytes and refuses images over 200 MP from the header, before
+    decoding. It decodes subsampled, applies EXIF orientation
+    (`metadata-extractor`), and writes 2048 px and 480 px JPEGs
+    without metadata to fixed keys. Bad files become `REJECTED` with
+    a fixed reason, and their originals are deleted. When retries run
+    out, the asset becomes `FAILED`.
+-   **Jobs** (`jobs` module, D12): `JobService.enqueue` must run in the
+    caller's transaction (outbox). A dispatcher sends due job IDs to
+    SQS, and re-sends jobs that never ran. The worker claims with a
+    conditional update and lease, and retries with exponential backoff
+    and jitter stored on the row. After 5 attempts the job is `FAILED`
+    and the handler's `giveUp` runs. Errors are stored as class names
+    or fixed sentences. SQS redrive moves crash-looping messages to a
+    DLQ. Worker logs carry the correlation ID of the request that
+    queued the job. Dispatcher and worker are toggled by config.
+-   **Cleanup:** an hourly task deletes uploads still pending after 24
+    hours, object first, then row.
+-   **Storage adapter** (`storage` module): `ObjectStorage` with an S3
+    implementation. AWS SDK types stay in the `storage` and `jobs`
+    adapters. All S3/SQS clients have connection, socket, and call
+    timeouts.
+-   **Infrastructure** (`infra/`, D13): the first CDK stack,
+    `PhotoSpace-<env>-Storage`. It has a private bucket (block public
+    access, ACLs off, TLS-only policy, SSE-S3, versioning with 30-day
+    expiry of old versions, CORS `PUT` from the app origin only,
+    retained on delete) and the job queue with its DLQ. It runs on
+    Node 24 type stripping, with recommended feature flags in
+    `cdk.json`. CI gets an infra job (typecheck, test, synth).
+-   **Local and test stack:** `compose.yaml` adds S3Mock and ElasticMQ
+    (`local/elasticmq.conf` defines the queue, DLQ, and redrive).
+    Testcontainers starts the same images for integration tests and
+    `spring-boot:test-run`.
+-   **Frontend:** a Photos section on the session page. It has
+    multi-file upload (3 in parallel), a client-side type/size check,
+    per-file progress and errors (400/409 reasons, storage failures),
+    a thumbnail grid with status badges and rejection reasons, and
+    previews in a new tab. It polls every 2 s while photos are
+    processing. Uploads are hidden for archived sessions. No new
+    dependencies.
+-   **New dependencies:** AWS SDK v2 `s3`, `sqs`, `apache5-client`
+    (2.55.10), `metadata-extractor` 2.19.0; `aws-cdk-lib` 2.272.0,
+    `constructs`, `aws-cdk` CLI (infra only).
+-   **Decisions:** D11 (presigned uploads and processing), D12 (job
+    table outbox plus SQS), D13 (local emulators, CDK testing).
+-   **Verified locally on 2026-10-16:**
+    -   `cd backend && ./mvnw verify`: 30 unit tests and 79 integration
+        tests passed.
+        -   `ImageProcessorTest` (8): JPEG and PNG derivatives and
+            sizes, no upscaling, transparency on white, EXIF
+            orientations 6 and 3, non-images, truncated JPEG, and a
+            900 MP PNG header refused without decoding. Also
+            `FileNamesTest`, `BackoffTest`, and `SqsJobQueueTest`.
+        -   `AssetsIT` (16): the full upload through a presigned URL to
+            S3Mock, completion, the real worker, and `READY` with
+            upright dimensions, checksum, and fetchable thumbnail and
+            preview. Also: idempotent completion (one job), and
+            reprocessing after a simulated crash (one asset, same
+            keys). A JPEG declared as PNG is recorded as JPEG. Text
+            uploaded as JPEG is `REJECTED` with its original deleted,
+            and a size mismatch is `REJECTED`. Validation errors,
+            completion before upload (409), and archived sessions (409)
+            are covered. So are the quota (including freed space) and
+            the pending-upload limit, members uploading, and cleanup of
+            abandoned uploads (idempotent). Cross-workspace denial
+            covers every route via the foreign and the own workspace
+            path, with no side effects. The composite FK rejects a
+            cross-workspace session.
+        -   `JobsIT` (9), through the real dispatcher, ElasticMQ, and
+            worker: a commit runs the job, and retries succeed on
+            attempt 3. Giving up after 3 attempts (in tests) stores
+            only the error class. Idempotent enqueue, a required
+            transaction with rollback, duplicate messages ignored,
+            recovery of a job whose worker died, and failure of one
+            that died on its last attempt are covered.
+        -   `ApiRouteAuthorizationIT` covers the 4 new routes.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 49 tests passed (8 new in `Photos.test.tsx`)
+        and the build succeeded.
+    -   `cd infra && npm ci && npm run typecheck && npm test && npx cdk
+        synth -q -c env=staging -c appOrigin=https://staging.example.com`:
+        7 tests passed and synth succeeded.
+    -   GitHub Actions workflow checked with `actionlint`.
+    -   Manual run (`docker compose up -d --wait`,
+        `spring-boot:test-run -Dspring-boot.run.profiles=compose-db`,
+        `npm run dev`, all API calls through the Vite proxy):
+        -   V5 migrated on the Compose database.
+        -   A 3000×2000 PNG went through the S3Mock CORS preflight
+            from `http://localhost:5173` and the presigned `PUT`. It
+            was `READY` about 2 s after completion, with a matching
+            SHA-256 and a fetchable JPEG thumbnail.
+        -   A text file declared as JPEG was `REJECTED`. A GIF got a
+            400 and a missing CSRF header a 403. A second user got 404
+            for the asset, the list, and starting an upload.
+        -   Photos survive an S3Mock restart (named volume).
+        -   The backend log had no presigned URLs, signatures, file
+            names, session titles, or emails. Worker log lines carried
+            the completing request's correlation ID.
+-   **Known gaps:**
+    -   Not deployed. No AWS account was used, so real S3 signature
+        enforcement of type and size, bucket CORS, and block public
+        access are verified only by CDK assertions until Milestone 8.
+        S3Mock does not check signatures. Locally the worker's size
+        and content checks are what enforce the limits.
+    -   The upload UI was not clicked through in a real browser. Component
+        tests and a scripted run through the proxy cover it. Worth a
+        manual pass: README, "Photo uploads: a quick manual check".
+    -   No IAM roles or grants yet. They come with Milestone 8's ECS
+        services, and so do metrics and alarms for queue depth, DLQ
+        messages, and stuck jobs.
+    -   No malware scanning. Accepted files are re-encoded for
+        derivatives, and originals are only ever served back as
+        downloads (Milestone 5).
+    -   Only JPEG and PNG. No HEIC, RAW, or WebP. CMYK JPEGs are
+        rejected as unreadable.
+    -   No delete or retry of an asset by the user. A `FAILED` photo is
+        re-uploaded. Deletion belongs with galleries and retention.
+    -   Thumbnail URLs expire after 10 minutes. A page left open
+        longer needs a reload to show images again.
+    -   `npm audit` reports a high-severity `brace-expansion` advisory
+        bundled inside `aws-cdk-lib`. It is only used by `cdk synth`
+        on developer and CI machines and is not deployed.
+    -   Limits are global configuration, not per-workspace plans
+        (Milestone 11).
+
+### Milestone 5: next
+
+Private galleries and downloads: galleries built from ready assets,
+expiring and revocable share tokens (hashes only), and short-lived
+download URLs.

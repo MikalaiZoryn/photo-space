@@ -13,6 +13,7 @@ import { toFormError } from '../ui/formError.ts'
 import { LoadError } from '../ui/LoadError.tsx'
 import { useLoad } from '../useLoad.ts'
 import { SessionForm } from './SessionForm.tsx'
+import { SessionPhotos } from './SessionPhotos.tsx'
 import { statusActions, statusLabels } from './status.ts'
 
 type Props = { workspaceId: string; sessionId: string }
@@ -184,6 +185,7 @@ function SessionView({
         <dt>Notes</dt>
         <dd className="notes">{session.notes ?? '—'}</dd>
       </dl>
+      <SessionPhotos workspaceId={workspaceId} sessionId={session.id} archived={archived} />
     </section>
   )
 }

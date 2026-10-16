@@ -27,7 +27,8 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      # Unit tests (Surefire) and Testcontainers integration tests (Failsafe) against PostgreSQL 18.
+      # Unit tests (Surefire) and Testcontainers integration tests (Failsafe) against PostgreSQL 18 and the
+      # S3 and SQS emulators.
       - run: ./mvnw -B verify
 
   frontend:
@@ -49,3 +50,23 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  infra:
+    name: Infrastructure (typecheck, test, synth)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: infra/.nvmrc
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Synthesizes without AWS credentials; nothing is deployed.
+      - run: npx cdk synth -q -c env=staging -c appOrigin=https://staging.example.com

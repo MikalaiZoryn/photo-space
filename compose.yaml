@@ -19,5 +19,28 @@ services:
       timeout: 3s
       retries: 10
 
+  # S3-compatible emulator for private photo storage (D11). It accepts any credentials and does not check
+  # presigned URL signatures, so type and size limits are enforced locally only by the backend's processing.
+  s3:
+    image: adobe/s3mock:5.2.3
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: photo-space-local
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /home/cnb/s3mock-data
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    ports:
+      - "127.0.0.1:${S3_PORT:-9090}:9090"
+    volumes:
+      - s3-data:/home/cnb
+
+  # SQS-compatible emulator for the job queue and its dead-letter queue (D12). Queues are in memory: after a
+  # restart, the backend's dispatcher re-sends unfinished jobs from the database.
+  sqs:
+    image: softwaremill/elasticmq-native:1.7.1
+    ports:
+      - "127.0.0.1:${SQS_PORT:-9324}:9324"
+    volumes:
+      - ./local/elasticmq.conf:/opt/elasticmq.conf:ro
+
 volumes:
   postgres-data:
+  s3-data:

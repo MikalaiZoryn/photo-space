@@ -91,3 +91,38 @@ A short record of decisions that the project documents left open. Add new entrie
   - **Cross-module links stay inside the workspace at the database level too.** A link to another module's record uses a composite foreign key on `(workspace_id, <id>)`, as `photo_sessions` does with `clients`.
 - **Why:** archiving keeps history for galleries, content, and tasks that will link to these records. A single status endpoint gives later workflows (Milestone 7) and auditing one place to hook into.
 - **Consequences:** later resources (galleries, tasks) follow the same conventions. Hard deletion for data-retention requests is a separate, later feature.
+
+## D11: Photo uploads go straight to private S3 through presigned PUT URLs
+
+- **Date:** 2026-10-16 (Milestone 4)
+- **Decision:**
+  - The browser asks the API to start an upload (`POST …/sessions/{id}/assets` with name, type, and size). The API checks membership, the session (it must not be archived), the type allowlist (JPEG and PNG), the size limit (100 MB), the number of unfinished uploads (100 per workspace), and the workspace storage quota (100 GB, counting pending, processing, and ready originals). It records a `PENDING_UPLOAD` asset and returns a presigned `PUT` URL, valid for 15 minutes, for a key it generates: `workspaces/{workspaceId}/originals/{assetId}`. `Content-Type` and `Content-Length` are signed, so S3 refuses any other type or size.
+  - The browser then calls `POST …/assets/{id}/complete`. The API checks that the object exists, moves the asset to `PROCESSING`, and queues the processing job in the same transaction. Completing again is harmless. There is no S3 event path; completion is the only trigger.
+  - The worker trusts nothing the browser said. It checks the stored size, identifies the type from the file's first bytes, reads the pixel dimensions from the header and refuses images over 200 megapixels before decoding, decodes subsampled, applies the EXIF orientation, and writes a 2048 px preview and a 480 px thumbnail as re-encoded JPEGs without metadata, so GPS and camera data stay out of them. It records the upright dimensions and the SHA-256 of the original. A file that is not an acceptable photo becomes `REJECTED` with a fixed reason, and its original is deleted.
+  - Only `READY` assets get URLs, and only for derivatives: presigned `GET` URLs valid for 10 minutes. The API never returns a URL for an original (downloads are Milestone 5). File names are display-only, cleaned of directories and control or formatting characters, and never used in keys.
+  - Uploads still pending after 24 hours are deleted, object first, by an hourly cleanup.
+  - Storage sits behind `ObjectStorage` (`storage` module). AWS SDK types stay inside its S3 adapter.
+- **Why:** direct uploads keep large files out of the API process. Signing the type and size makes S3 enforce the limits, and server-side validation covers everything a signature cannot (content, dimensions, orientation).
+- **Consequences:** the bucket needs a CORS rule for the app origin (`PUT` with `content-type` only). Limits are configuration (`app.assets.*`), not per-workspace plans yet. Retrying a `FAILED` asset means uploading it again. Formats beyond JPEG and PNG (HEIC, RAW, WebP) need decoders the JDK lacks, so they are left for later.
+
+## D12: Background jobs: a job table as outbox, SQS as the wake-up signal
+
+- **Date:** 2026-10-16 (Milestone 4)
+- **Decision:**
+  - `background_jobs` is the source of truth: type, subject, a unique idempotency key, status (`QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`), attempts, the next attempt time, a lease, a safe error summary, and the correlation ID of the request that queued it. `JobService.enqueue` requires the caller's transaction, so the job commits or rolls back with the change that needs it.
+  - A dispatcher, scheduled every 2 seconds, sends the IDs of due jobs to SQS (`FOR UPDATE SKIP LOCKED`, so several instances can run it). It re-sends a job that was sent over 15 minutes ago but never ran (a lost message, or a worker that died mid-job).
+  - The worker long-polls SQS. It claims the job with one conditional `UPDATE` (queued and due, or running on an expired lease), runs the handler, and records the result. A failure schedules the next attempt on the row with exponential backoff and jitter (30 s base, 15 min cap). After 5 attempts the job is `FAILED` and the handler's `giveUp` records the final outcome. The message is deleted in every case. Error summaries are the exception class or a fixed `JobFailure` sentence, never exception messages.
+  - SQS's redrive policy moves a message to the dead-letter queue after 5 receives that were never deleted. That only happens when processing a message keeps crashing the worker or the database is unreachable. The job row stays unfinished, so the dispatcher re-sends it later anyway. Re-driving the DLQ into the main queue is always safe.
+  - Handlers must be idempotent. The photo handler acts only on an asset still in `PROCESSING`, writes derivatives to fixed keys, and never inserts asset rows.
+  - One jar runs both roles: `app.jobs.dispatcher.enabled` and `app.jobs.worker.enabled` (both on locally). Milestone 8 runs the worker as its own ECS service.
+- **Why:** the database row makes status visible to the UI and keeps retries and backoff testable without relying on queue features. SQS gives the worker a cheap, scalable wake-up and a DLQ. The outbox avoids the dual write where the database commits but the message is never sent.
+- **Consequences:** dispatching adds up to 2 seconds of latency. There is no job-status API yet; the asset status is what users see. Metrics and alarms for queue depth, DLQ messages, and stuck jobs arrive with Milestone 8.
+
+## D13: Local AWS emulators and infrastructure tests
+
+- **Date:** 2026-10-16 (Milestone 4)
+- **Decision:**
+  - `compose.yaml` adds Adobe S3Mock (`adobe/s3mock`) for S3 and ElasticMQ (`softwaremill/elasticmq-native`) for SQS, both bound to `127.0.0.1`. ElasticMQ's queues, including the DLQ and its redrive policy, are in `local/elasticmq.conf`. The backend integration tests start the same images with Testcontainers. When an emulator endpoint is configured, the backend uses path-style URLs and placeholder credentials. Otherwise it uses the default AWS credential chain.
+  - LocalStack and MinIO are not used: LocalStack now requires an account token, and MinIO no longer publishes images.
+  - The CDK app (`infra/`) runs on Node 24's built-in TypeScript support, with no `ts-node` or build step, and is tested with `node --test` and `aws-cdk-lib/assertions` against the same feature flags as `cdk synth` (`cdk.json`).
+- **Consequences:** S3Mock does not check signatures, so locally the signed type and size are not enforced. The worker's size and content checks still are. Real S3 behavior (signature enforcement, CORS, block public access) is verified only when Milestone 8 deploys to AWS.

@@ -35,7 +35,7 @@ class BackendApplicationIT {
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class);
 
         assertThat(failed).isEmpty();
-        assertThat(applied).containsExactly("1", "2", "3", "4");
+        assertThat(applied).containsExactly("1", "2", "3", "4", "5");
     }
 
     @Test

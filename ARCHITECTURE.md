@@ -168,9 +168,13 @@ Suggested tables (fields are indicative; refine during implementation):
     `BOOKED`, `COMPLETED`, `DELIVERED`, `CANCELLED`), `archived_at`,
     `version`, timestamps. (Implemented in Milestone 3; see D9 and D10
     in `docs/decisions.md`.)
--   `photo_assets`: `id`, `workspace_id`, optional `session_id`, S3
-    object key, original filename, content type, byte size, checksum,
-    dimensions, processing status, timestamps.
+-   `photo_assets`: `id`, `workspace_id`, optional `session_id`
+    (composite foreign key with `workspace_id`), S3 object keys
+    (original, thumbnail, preview), original filename, content type,
+    byte size, SHA-256 checksum, upright dimensions, processing status
+    (`PENDING_UPLOAD`, `PROCESSING`, `READY`, `REJECTED`, `FAILED`),
+    safe failure reason, timestamps. (Implemented in Milestone 4; see
+    D11.)
 -   `galleries`: `id`, `workspace_id`, optional `session_id`, title,
     status, expiry/settings, timestamps.
 -   `gallery_assets`: `gallery_id`, `asset_id`, sort order, download
@@ -197,7 +201,9 @@ Suggested tables (fields are indicative; refine during implementation):
     start/end timestamps, approval references.
 -   `background_jobs` or equivalent job records: job type, entity
     reference, status, idempotency key, attempts, timestamps, safe error
-    summary.
+    summary. (Implemented in Milestone 4 as `background_jobs`, with the
+    next attempt time, lease, dispatch time, and correlation ID; see
+    D12.)
 -   `audit_events`: actor, workspace, action, target, timestamp,
     correlation ID, safe metadata.
 
@@ -234,7 +240,8 @@ product requirement emerges.
     presigned upload URL for a server-generated object key.
 4.  Browser uploads directly to private S3.
 5.  Browser confirms upload, or an S3 event triggers
-    validation/processing.
+    validation/processing. (Milestone 4 uses browser confirmation only;
+    see D11.)
 6.  Worker verifies object metadata and actual file signature, then
     creates previews/thumbnails and updates asset status.
 7.  The asset becomes available only after validation and processing
