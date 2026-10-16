@@ -404,3 +404,31 @@ entire product in one run.
 
 After Milestone 0 is reviewed, implement Milestone 1. Continue
 sequentially and keep each change small enough to review and test.
+
+## Progress
+
+### Milestone 0: done (2026-10-15)
+
+-   The repository started empty, so there was no existing code to preserve.
+-   Added `CLAUDE.md`, `README.md`, `.gitignore`, `.editorconfig`, and
+    `docs/decisions.md`.
+-   Recorded decisions: AWS CDK in TypeScript (D1), Maven (D2), and a
+    monorepo with a modular monolith (D3).
+-   Created the `frontend/`, `backend/`, `infra/`, and `docs/` folders.
+    Each placeholder README explains when its contents arrive.
+-   `.env.example` is deferred to Milestone 1, where the first real
+    configuration (the local database) is consumed. Adding it now would
+    be speculative.
+-   Verification: `git ls-files` lists no secrets or `.env` files. There
+    is no build or test yet.
+-   Known gap: the dev machine does not yet have Java, Node, Docker, or
+    the AWS CLI. These must be installed before Milestone 1 (see the
+    README prerequisites).
+
+### Milestone 1: next
+
+Proposed sequence: Docker Compose with PostgreSQL, then a Spring Boot
+skeleton (Maven wrapper, Flyway, health endpoint, Testcontainers
+integration test), then a Vite React app calling the health endpoint,
+then GitHub Actions CI for both, then the documented commands in the
+README.

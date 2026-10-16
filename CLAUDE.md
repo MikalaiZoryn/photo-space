@@ -8,7 +8,8 @@ Read these before any milestone work. Keep them current.
 
 - `SYSTEM_OVERVIEW.md`: product vision, MVP scope, out-of-scope list
 - `ARCHITECTURE.md`: modular monolith, data model, security, jobs, AI, integrations
-- `IMPLEMENTATION_PLAN.md`: milestones, acceptance criteria, Definition of Done
+- `IMPLEMENTATION_PLAN.md`: milestones, acceptance criteria, Definition of Done, progress log
+- `docs/decisions.md`: recorded technical decisions (add new ones there)
 
 ## Stack
 

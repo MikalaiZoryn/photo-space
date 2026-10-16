@@ -123,7 +123,7 @@ be expanded later.
 ## 6. Recommended initial technology stack
 
 -   Frontend: React, TypeScript, Vite.
--   Backend: Java and Spring Boot.
+-   Backend: Java and Spring Boot, built with Maven.
 -   Authentication: Google OpenID Connect, with server-side application
     sessions.
 -   Database: PostgreSQL, with Flyway migrations.
@@ -131,9 +131,9 @@ be expanded later.
 -   Background processing: SQS plus worker processes; use Lambda for
     small event handlers or scheduled tasks when appropriate.
 -   Runtime: AWS ECS Fargate for the API and long-running workers.
--   Infrastructure as code: choose one primary approach for shared
-    infrastructure (AWS CDK or Terraform); use AWS SAM only if
-    Lambda-specific workflows justify a separate tool.
+-   Infrastructure as code: AWS CDK in TypeScript (decided; see
+    `docs/decisions.md`). Use AWS SAM only if Lambda-specific workflows
+    justify a separate tool.
 -   CI/CD: GitHub Actions.
 -   Observability: CloudWatch logs/metrics/alarms and structured
     application logs.
