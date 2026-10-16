@@ -20,6 +20,24 @@ export class ApiError extends Error {
   }
 }
 
+/** One page of a list, as every list endpoint returns it. */
+export type Page<T> = {
+  items: T[]
+  page: number
+  size: number
+  totalItems: number
+}
+
+/** Appends the defined, non-empty values as a query string. */
+export function withQuery(path: string, params: Record<string, string | number | boolean | null | undefined>): string {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value))
+  }
+  const text = query.toString()
+  return text ? `${path}?${text}` : path
+}
+
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown

@@ -75,7 +75,7 @@ Sign-in asks only for `openid email`. Gmail and Calendar access will be separate
 
 The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhost`. For Safari, set `SESSION_COOKIE_SECURE=false` locally.
 
-### API (Milestone 2)
+### API
 
 | Endpoint | Access |
 | --- | --- |
@@ -87,8 +87,34 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `GET /api/workspaces`, `POST /api/workspaces` | Signed in. Lists your workspaces, or creates one with you as owner. |
 | `GET /api/workspaces/{id}`, `GET /api/workspaces/{id}/members` | Workspace members. Everyone else gets 404. |
 | `PUT /api/workspaces/{id}` | Workspace owners (members get 403, non-members get 404). |
+| `GET /api/workspaces/{id}/clients?q=&archived=false&page=0&size=25` | Members. Clients sorted by name; `q` searches name and email. |
+| `POST /api/workspaces/{id}/clients` | Members. Creates a client: `{name, email, phone, notes}`. |
+| `GET`, `PUT /api/workspaces/{id}/clients/{clientId}` | Members. `PUT` takes `{version, client: {…}}`. |
+| `POST /api/workspaces/{id}/clients/{clientId}/archive`, `…/restore` | Members. Idempotent. |
+| `GET /api/workspaces/{id}/sessions?status=&clientId=&archived=false&page=0&size=25` | Members. Newest first, unscheduled on top. |
+| `POST /api/workspaces/{id}/sessions` | Members. Creates an inquiry: `{title, sessionType, clientId, startLocal, endLocal, location, notes}`. |
+| `GET`, `PUT /api/workspaces/{id}/sessions/{sessionId}` | Members. `PUT` takes `{version, session: {…}}`. |
+| `POST /api/workspaces/{id}/sessions/{sessionId}/status` | Members. `{status}`; only allowed transitions (409 otherwise). |
+| `POST /api/workspaces/{id}/sessions/{sessionId}/archive`, `…/restore` | Members. Idempotent. |
 
 Unauthenticated calls get a 401 problem body. State-changing calls need the `X-XSRF-TOKEN` header, which must match the `XSRF-TOKEN` cookie. Every response carries an `X-Correlation-Id` header, and error bodies include the same `correlationId`. All workspace-owned APIs must live under `/api/workspaces/{workspaceId}/`, where one central check enforces membership (see D8).
+
+Conventions for workspace resources (D9 and D10 in `docs/decisions.md`):
+
+- Lists return `{items, page, size, totalItems}`. `page` starts at 0, and `size` is 1–100 (default 25).
+- Records are archived, not deleted. Archived records drop out of lists unless you pass `archived=true`, and must be restored before they can be edited.
+- `PUT` sends back the `version` you loaded. A stale version gets a 409, with an explanation in `detail`.
+- Session `startLocal` and `endLocal` are wall-clock times in the workspace time zone (`2026-11-07T10:30`, no offset). The server stores UTC, rejects times skipped by a daylight-saving change, and returns both `startsAt` (UTC) and `startLocal`.
+- The session lifecycle is `INQUIRY → BOOKED → COMPLETED → DELIVERED`. `INQUIRY` and `BOOKED` can be cancelled, and `CANCELLED` can reopen as `INQUIRY`. Booking needs a start time. Each session response lists its `allowedStatuses`.
+
+### Clients and sessions: a quick manual check
+
+With the stack running and dev sign-in (Option A):
+
+1. Sign in, create a workspace in `Europe/Warsaw`, and open the **Clients** tab. Add a client.
+2. On the client's page, choose **New session for …**. Enter a start such as 2026-11-07 10:30, then save. The session page shows 10:30, whatever your browser's time zone is.
+3. Try **Mark booked**, then **Mark completed**. Only allowed transitions are offered. Archive the session and check that it leaves the list unless **Show archived** is ticked.
+4. Sign in as a second email in a private window. That user's workspace shows none of the first user's data. Pasting a session URL from the first user shows "not found".
 
 ### Health endpoints
 

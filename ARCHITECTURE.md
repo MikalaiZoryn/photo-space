@@ -161,10 +161,13 @@ Suggested tables (fields are indicative; refine during implementation):
 -   `workspace_members`: `workspace_id`, `user_id`, role, created
     timestamp; unique workspace + user.
 -   `clients`: `id`, `workspace_id`, name, email, phone, notes,
-    timestamps.
--   `photo_sessions`: `id`, `workspace_id`, optional `client_id`,
-    session type, scheduled start/end, location, notes, status,
-    timestamps.
+    `archived_at`, `version`, timestamps. (Implemented in Milestone 3.)
+-   `photo_sessions`: `id`, `workspace_id`, optional `client_id`
+    (composite foreign key with `workspace_id`), title, session type,
+    scheduled start/end (UTC), location, notes, status (`INQUIRY`,
+    `BOOKED`, `COMPLETED`, `DELIVERED`, `CANCELLED`), `archived_at`,
+    `version`, timestamps. (Implemented in Milestone 3; see D9 and D10
+    in `docs/decisions.md`.)
 -   `photo_assets`: `id`, `workspace_id`, optional `session_id`, S3
     object key, original filename, content type, byte size, checksum,
     dimensions, processing status, timestamps.

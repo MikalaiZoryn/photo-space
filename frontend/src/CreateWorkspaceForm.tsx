@@ -1,33 +1,26 @@
 import { useState, type FormEvent } from 'react'
-import { ApiError } from './api/client.ts'
 import { createWorkspace, type Workspace } from './api/workspaces.ts'
+import { noFormError, toFormError, type FormError } from './ui/formError.ts'
 
 type Props = {
   onCreated: (workspace: Workspace) => void
   onCancel?: () => void
 }
 
-type FormError = { fields: Record<string, string>; message?: string }
-
 export function CreateWorkspaceForm({ onCreated, onCancel }: Props) {
   const [name, setName] = useState('')
   const [timezone, setTimezone] = useState(browserTimezone)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<FormError>({ fields: {} })
+  const [error, setError] = useState<FormError>(noFormError)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setSubmitting(true)
-    setError({ fields: {} })
+    setError(noFormError)
     try {
       onCreated(await createWorkspace({ name: name.trim(), timezone: timezone.trim() }))
     } catch (e) {
-      if (e instanceof ApiError && e.status === 400 && e.problem.errors) {
-        setError({ fields: e.problem.errors })
-      } else {
-        const reference = e instanceof ApiError && e.problem.correlationId ? ` (ref ${e.problem.correlationId})` : ''
-        setError({ fields: {}, message: `Could not create the workspace${reference}.` })
-      }
+      setError(toFormError(e, 'create the workspace'))
     } finally {
       setSubmitting(false)
     }

@@ -571,7 +571,128 @@ sequentially and keep each change small enough to review and test.
         load balancer is left to Milestone 8 (see D6).
     -   No rate limiting on sign-in endpoints yet (Milestone 8 or 11).
 
-### Milestone 3: next
+### Milestone 3: done (2026-10-15)
 
-Clients and photography sessions, scoped under
-`/api/workspaces/{workspaceId}/`.
+-   **Schema:** `V4__clients_and_sessions.sql` adds `clients` and
+    `photo_sessions`. Both have a non-null `workspace_id`,
+    `archived_at`, and `version`. A session's optional client uses a
+    composite foreign key `(workspace_id, client_id)`, so the database
+    itself refuses a link to another workspace's client. CHECK
+    constraints enforce text lengths, an end after the start, and a
+    start once a session is booked.
+-   **Clients** (`clients` module): create, read, edit, archive, and
+    restore. Lists are paged, sorted by name ignoring case, and
+    searchable by part of the name or email (`LIKE` wildcards are
+    escaped). Text is trimmed, and blank optional fields become null.
+    Validation covers name length, email format, phone characters, and
+    notes length.
+-   **Sessions** (`sessions` module, which depends on `clients` through
+    `ClientService`'s public methods only): create, read, edit,
+    archive, restore, and status changes. The lifecycle is
+    `INQUIRY → BOOKED → COMPLETED → DELIVERED`. `INQUIRY` and `BOOKED`
+    can be cancelled, and `CANCELLED` can reopen as `INQUIRY`.
+    `DELIVERED` is final. Booked and later statuses need a start
+    time. New sessions start as inquiries, and only
+    `POST …/status` changes status. Lists are paged, newest first
+    with unscheduled sessions on top, and filterable by status and
+    client. A client link must be an active client of the same
+    workspace; a foreign client ID gets the same 400 as an unknown
+    one.
+-   **Time zones (D9):** start and end are entered as wall-clock time
+    in the workspace zone and converted on the server. Times skipped
+    by a daylight-saving change are rejected, and repeated times
+    resolve to the earlier one. They are stored as UTC and returned
+    as both UTC instants and workspace-local times.
+-   **Conventions (D10):** archive instead of delete; optimistic
+    locking with `version` (409 on a stale edit); paging with
+    `page`/`size` (max 100) and `{items, page, size, totalItems}`.
+    Malformed path IDs return 404 like unknown ones. Malformed or
+    out-of-range query parameters return 400 with per-field `errors`.
+    New `ConflictException` (409 with a fixed, safe `detail`) and
+    `InvalidFieldsException` (400 with `errors`) in `shared/web`.
+-   **Frontend:** Sessions, Clients, and Members tabs inside the
+    workspace. Each resource has a list (filters, search, pager), a
+    detail page (status actions from `allowedStatuses`,
+    archive/restore, the client's sessions), and a create/edit form
+    (client picker with server-side search, `datetime-local` inputs
+    labelled with the workspace zone). Every page has loading, empty,
+    not-found, and retryable error states, and 409 explanations are
+    shown inline. Pages live in the URL hash (`#/clients/{id}`), via
+    a 40-line `routing.ts` instead of a router dependency. Switching
+    workspace returns to `#/sessions`. A shared `useLoad` hook
+    handles abortable loading. No new dependencies.
+-   **Decisions:** D9 (session time zones) and D10 (record lifecycle
+    conventions).
+-   **Verified locally on 2026-10-15:**
+    -   `cd backend && ./mvnw verify`: 16 unit tests and 54
+        integration tests passed.
+        -   `SessionStatusTest`, `SessionScheduleTest`: the transition
+            table; Warsaw summer/winter offsets, the spring-forward gap
+            (2027-03-28 02:30 rejected), the fall-back overlap
+            (2026-10-25 02:30 resolves to CEST), end-after-start, and
+            year bounds.
+        -   `ClientsIT` (11): CRUD and normalization, validation,
+            client-supplied IDs and workspace ignored, stale version
+            409, archive/restore (idempotent; editing archived is a
+            409), paging and case-insensitive sort, search including
+            a literal `%`, paging validation. Cross-workspace denial
+            through both the foreign and the own workspace path, with
+            no side effects. Unknown, foreign, and malformed IDs give
+            the same 404. Members can manage clients.
+        -   `PhotoSessionsIT` (16): workspace-zone conversion (checked
+            in the stored UTC value), changing the workspace zone
+            keeps the instant, validation and DST gap errors, offsets
+            rejected, the full lifecycle with 409s for skipped and
+            backward steps, booked sessions keep their start, stale
+            version, client links (foreign = unknown, archived
+            refused, an existing link kept), archive/restore, list
+            order, filters, and paging. Cross-workspace denial for
+            every endpoint. The composite foreign key rejects a direct
+            SQL insert linking another workspace's client.
+        -   `ApiRouteAuthorizationIT` covers the 12 new routes
+            automatically.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 41 tests passed and the build succeeded.
+        These include time formatting in the workspace zone (on a
+        machine in America/Los_Angeles), route parsing, client and
+        session flows against a mocked API (create, validation
+        errors, nested `session.startLocal` errors, 409 conflicts,
+        search and paging queries, status actions, archive/restore,
+        not-found, retry), and workspace switching resetting the
+        route.
+    -   Manual run, `spring-boot:test-run -Dspring-boot.run.profiles=compose-db`
+        plus `npm run dev`, all through the Vite proxy:
+        -   The Compose database migrated from V3 to V4.
+        -   Created a client and a session at 2026-11-07 10:30 Warsaw
+            time. It was stored as 09:30 UTC (CET) and returned with
+            `startLocal` 10:30.
+        -   Booked the session; BOOKED → DELIVERED got a 409 with a
+            correlation ID. Filtering by client worked.
+        -   A second user got 404 for the session and for creating a
+            client in the first workspace, 404 for the client through
+            their own workspace, and a 400 `clientId` error when
+            linking it.
+        -   POST without the CSRF header got 403.
+        -   The backend log contained no client names, emails, or
+            session titles.
+-   **Known gaps:**
+    -   The UI was not clicked through in a real browser (none is
+        available in this environment). Component tests cover the
+        flows, and the API was exercised through the dev proxy.
+        Worth a quick manual pass: README, "Clients and sessions".
+    -   No hard delete or data export for clients yet; these belong
+        to data-retention work (Milestone 11).
+    -   List filters and the current page are not kept in the URL, so
+        going back from a detail page returns to page one.
+    -   Client search uses `ILIKE` without a trigram index. That is
+        fine for one business; add an index if a workspace reaches
+        many thousands of clients.
+    -   No audit events for status changes yet. `audit` arrives with
+        the first sensitive approvals; `POST …/status` is the single
+        hook point.
+
+### Milestone 4: next
+
+Secure photo upload and processing: asset metadata, a private S3
+bucket through CDK, presigned uploads, and an asynchronous processing
+worker.
