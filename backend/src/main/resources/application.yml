@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: photo-space
+  datasource:
+    # Defaults match compose.yaml for local development. Deployed environments set these via env vars.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/photospace}
+    username: ${DB_USERNAME:photospace}
+    password: ${DB_PASSWORD:photospace}
+  flyway:
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
