@@ -16,7 +16,21 @@
 
     <properties>
         <java.version>25</java.version>
+        <aws-sdk.version>2.55.10</aws-sdk.version>
+        <metadata-extractor.version>2.19.0</metadata-extractor.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -54,6 +68,39 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-session-jdbc</artifactId>
+        </dependency>
+        <!-- Private photo storage and the job queue (D11, D12). Only the storage and jobs adapters use these. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <!-- Only the synchronous client is used. -->
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sqs</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- The SDK's default synchronous HTTP client, declared so its timeouts can be configured. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>apache5-client</artifactId>
+        </dependency>
+        <!-- EXIF orientation of uploaded photos; ImageIO does not apply it. -->
+        <dependency>
+            <groupId>com.drewnoakes</groupId>
+            <artifactId>metadata-extractor</artifactId>
+            <version>${metadata-extractor.version}</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>

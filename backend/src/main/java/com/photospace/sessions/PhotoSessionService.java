@@ -197,6 +197,13 @@ public class PhotoSessionService {
         return get(workspace, sessionId);
     }
 
+    /** A session of this workspace, archived or not. Empty for unknown IDs and other workspaces' sessions alike. */
+    @Transactional(readOnly = true)
+    public Optional<SessionSummary> findSummary(WorkspaceContext workspace, UUID sessionId) {
+        return find(workspace, sessionId, false)
+                .map(row -> new SessionSummary(row.id(), row.title(), row.archivedAt() != null));
+    }
+
     /**
      * The client must belong to this workspace (a foreign ID gets the same answer as an unknown one) and must
      * not be archived, unless the session already links to it.
@@ -311,6 +318,9 @@ public class PhotoSessionService {
             int version,
             Instant createdAt,
             Instant updatedAt) {}
+
+    /** What other modules need to know about a session. */
+    public record SessionSummary(UUID id, String title, boolean archived) {}
 
     /**
      * A session as the API returns it. {@code startsAt}/{@code endsAt} are UTC instants; {@code startLocal}/

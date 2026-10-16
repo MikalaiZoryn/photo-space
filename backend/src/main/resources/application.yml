@@ -19,6 +19,47 @@ app:
     google:
       client-id: ${GOOGLE_CLIENT_ID:}
       client-secret: ${GOOGLE_CLIENT_SECRET:}
+  # Private photo storage (D11). The defaults match the S3 emulator in compose.yaml. Deployed environments set
+  # STORAGE_BUCKET and AWS_REGION, and set STORAGE_ENDPOINT to an empty value so the real S3 endpoint is used.
+  storage:
+    bucket: ${STORAGE_BUCKET:photo-space-local}
+    region: ${AWS_REGION:eu-central-1}
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9090}
+  # Background jobs (D12). The defaults match the SQS emulator in compose.yaml.
+  jobs:
+    queue-url: ${JOBS_QUEUE_URL:http://localhost:9324/000000000000/photo-space-jobs}
+    region: ${AWS_REGION:eu-central-1}
+    sqs-endpoint: ${JOBS_SQS_ENDPOINT:http://localhost:9324}
+    dispatcher:
+      # The API service runs the dispatcher; the worker service may too.
+      enabled: ${JOBS_DISPATCHER_ENABLED:true}
+      interval: 2s
+      batch-size: 20
+      stale-after: 15m
+    worker:
+      # The worker service runs this; the API service turns it off in deployed environments.
+      enabled: ${JOBS_WORKER_ENABLED:true}
+      wait-time: 20s
+      batch-size: 5
+      # Must be shorter than the queue's visibility timeout (15 minutes).
+      lease: 10m
+    retry:
+      max-attempts: 5
+      base-delay: 30s
+      max-delay: 15m
+  assets:
+    max-upload-bytes: 104857600 # 100 MB
+    workspace-quota-bytes: 107374182400 # 100 GB
+    max-pending-uploads: 100
+    upload-url-validity: 15m
+    view-url-validity: 10m
+    max-pixels: 200000000
+    preview-size: 2048
+    thumbnail-size: 480
+    cleanup:
+      enabled: ${ASSETS_CLEANUP_ENABLED:true}
+      interval: 1h
+      abandoned-after: 24h
 
 management:
   endpoints:

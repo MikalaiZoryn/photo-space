@@ -69,6 +69,41 @@ public final class ApiClient {
         return send("POST", path, json, false);
     }
 
+    /**
+     * Sends {@code body} to an absolute URL, such as a presigned upload URL, with only the given headers: no
+     * cookies and no CSRF token, as a browser's cross-origin upload would.
+     */
+    public static Response putBytes(URI url, byte[] body, Map<String, String> headers) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(url).PUT(HttpRequest.BodyPublishers.ofByteArray(body));
+        headers.forEach(request::header);
+        return sendRaw(request.build());
+    }
+
+    /** A plain GET of an absolute URL, such as a presigned thumbnail URL. */
+    public static HttpResponse<byte[]> getBytes(URI url) {
+        try {
+            return HttpClient.newHttpClient().send(HttpRequest.newBuilder(url).build(),
+                    HttpResponse.BodyHandlers.ofByteArray());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static Response sendRaw(HttpRequest request) {
+        try {
+            HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+            return new Response(response.statusCode(), response.body(), response.headers());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
     public String cookie(String name) {
         return cookies.get(name);
     }

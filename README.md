@@ -17,10 +17,11 @@ A management platform for photography businesses. It covers clients and sessions
 ```text
 frontend/          React + TypeScript + Vite web app (Vitest, oxlint)
 backend/           Java + Spring Boot modular monolith (Maven wrapper, Flyway)
-infra/             AWS CDK app in TypeScript                    (Milestone 4/8)
+infra/             AWS CDK app in TypeScript: private photo bucket and job queues per environment
+local/             Config for the local emulators (ElasticMQ queues)
 docs/              Decisions and operational docs
-compose.yaml       Local PostgreSQL for development
-.github/workflows/ CI: backend and frontend checks on every pull request
+compose.yaml       Local PostgreSQL, S3 emulator, and SQS emulator for development
+.github/workflows/ CI: backend, frontend, and infrastructure checks on every pull request
 ```
 
 ## Prerequisites
@@ -28,10 +29,10 @@ compose.yaml       Local PostgreSQL for development
 | Tool | Version | Notes |
 | --- | --- | --- |
 | Java | 25 (LTS) | Temurin or similar. Maven itself comes from the committed wrapper (`./mvnw`). |
-| Node.js | 24 (LTS), npm 11+ | `frontend/.nvmrc` pins the major version. |
-| Docker | Engine 29+ with Compose v2+ | Runs local PostgreSQL 18 and the Testcontainers integration tests. |
+| Node.js | 24 (LTS), npm 11+ | `frontend/.nvmrc` and `infra/.nvmrc` pin the major version. |
+| Docker | Engine 29+ with Compose v2+ | Runs local PostgreSQL 18, the S3 and SQS emulators, and the Testcontainers integration tests. |
 
-Later, for infrastructure work only: AWS CLI v2 and the AWS CDK CLI. Local development and all tests need no cloud credentials.
+Local development and all tests need no cloud credentials. The CDK CLI is a dev dependency of `infra/`; deploying (Milestone 8) will also need the AWS CLI v2 and an AWS account.
 
 ## Development commands
 
@@ -40,16 +41,16 @@ Run these from the repository root unless a directory is shown.
 ### Start the local stack
 
 ```bash
-docker compose up -d --wait               # PostgreSQL 18 on 127.0.0.1:5432
-(cd backend && ./mvnw spring-boot:run)    # API on http://localhost:8080; Flyway migrates on startup
+docker compose up -d --wait               # PostgreSQL 18 on :5432, S3 emulator on :9090, SQS emulator on :9324
+(cd backend && ./mvnw spring-boot:run)    # API and job worker on http://localhost:8080; Flyway migrates on startup
 (cd frontend && npm install && npm run dev)  # UI on http://localhost:5173; /api is proxied to :8080
 ```
 
 Open http://localhost:5173. Without Google credentials the page shows "No sign-in method is configured". Use one of the two sign-in options below. The system status line at the bottom should show "Backend UP, database UP".
 
-- Stop the database with `docker compose down`. Add `-v` to also wipe the data volume, which gives you a clean database.
-- If port 5432 is taken, set `POSTGRES_PORT` and `DB_URL`. `.env.example` lists the variables.
-- To run without Compose, `(cd backend && ./mvnw spring-boot:test-run)` starts the backend against a throwaway Testcontainers PostgreSQL, with dev sign-in enabled.
+- Stop the services with `docker compose down`. Add `-v` to also wipe the data volumes (database and stored photos), which gives you a clean start. The SQS emulator keeps queues in memory; after a restart the backend re-sends unfinished jobs from the database within 15 minutes.
+- If a port is taken, set `POSTGRES_PORT` and `DB_URL`, `S3_PORT` and `STORAGE_ENDPOINT`, or `SQS_PORT`, `JOBS_SQS_ENDPOINT`, and `JOBS_QUEUE_URL`. `.env.example` lists the variables.
+- To run without Compose, `(cd backend && ./mvnw spring-boot:test-run)` starts the backend against throwaway Testcontainers PostgreSQL, S3, and SQS emulators, with dev sign-in enabled. Photos uploaded this way are lost when it stops.
 
 ### Signing in locally
 
@@ -58,8 +59,8 @@ Pick one of these options. Both use the same server-side session, CSRF, and work
 **Option A: dev sign-in (no Google credentials needed).** Run the backend from the test classpath instead of `spring-boot:run`:
 
 ```bash
-(cd backend && ./mvnw spring-boot:test-run -Dspring-boot.run.profiles=compose-db)  # compose.yaml database
-(cd backend && ./mvnw spring-boot:test-run)                                        # throwaway Testcontainers database
+(cd backend && ./mvnw spring-boot:test-run -Dspring-boot.run.profiles=compose-db)  # compose.yaml services
+(cd backend && ./mvnw spring-boot:test-run)                                        # throwaway Testcontainers services
 ```
 
 The sign-in page then shows a "Development sign-in" form. Any email works, with no password. Each email is a separate user, so two emails let you try cross-workspace access. This code lives only in `backend/src/test` and is never packaged into the application jar (D8 in `docs/decisions.md`).
@@ -96,6 +97,10 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `GET`, `PUT /api/workspaces/{id}/sessions/{sessionId}` | Members. `PUT` takes `{version, session: {…}}`. |
 | `POST /api/workspaces/{id}/sessions/{sessionId}/status` | Members. `{status}`; only allowed transitions (409 otherwise). |
 | `POST /api/workspaces/{id}/sessions/{sessionId}/archive`, `…/restore` | Members. Idempotent. |
+| `GET /api/workspaces/{id}/sessions/{sessionId}/assets?page=0&size=25` | Members. The session's photos in upload order, in every status. |
+| `POST /api/workspaces/{id}/sessions/{sessionId}/assets` | Members. Starts an upload: `{filename, contentType, byteSize}`. Returns `{asset, upload: {url, method, headers, expiresAt}}`. |
+| `GET /api/workspaces/{id}/assets/{assetId}` | Members. One photo with its status, and thumbnail and preview URLs once `READY`. |
+| `POST /api/workspaces/{id}/assets/{assetId}/complete` | Members. Reports that the upload finished, which starts processing. Idempotent; 409 if the file is not in storage yet. |
 
 Unauthenticated calls get a 401 problem body. State-changing calls need the `X-XSRF-TOKEN` header, which must match the `XSRF-TOKEN` cookie. Every response carries an `X-Correlation-Id` header, and error bodies include the same `correlationId`. All workspace-owned APIs must live under `/api/workspaces/{workspaceId}/`, where one central check enforces membership (see D8).
 
@@ -107,6 +112,14 @@ Conventions for workspace resources (D9 and D10 in `docs/decisions.md`):
 - Session `startLocal` and `endLocal` are wall-clock times in the workspace time zone (`2026-11-07T10:30`, no offset). The server stores UTC, rejects times skipped by a daylight-saving change, and returns both `startsAt` (UTC) and `startLocal`.
 - The session lifecycle is `INQUIRY → BOOKED → COMPLETED → DELIVERED`. `INQUIRY` and `BOOKED` can be cancelled, and `CANCELLED` can reopen as `INQUIRY`. Booking needs a start time. Each session response lists its `allowedStatuses`.
 
+Photo uploads (D11 and D12):
+
+- The browser `PUT`s the file straight to private storage at `upload.url`, sending exactly `upload.headers`. The URL works for 15 minutes, for that one object, type, and size. Then it calls `…/complete`.
+- Accepted: JPEG and PNG, up to 100 MB and 200 megapixels. Each workspace may have up to 100 unfinished uploads and 100 GB of photos. Breaking a limit gets a 400 field error (type, size, name) or a 409 explanation (limits, archived session).
+- Asset status: `PENDING_UPLOAD → PROCESSING → READY`, or `REJECTED` (not a valid photo; `failureReason` says why and the original is deleted) or `FAILED` (processing kept failing after 5 attempts).
+- `thumbnailUrl` (480 px) and `previewUrl` (2048 px) are presigned and expire after 10 minutes; fetch the asset again for fresh ones. The original never has a URL here.
+- Uploads not completed within 24 hours are deleted.
+
 ### Clients and sessions: a quick manual check
 
 With the stack running and dev sign-in (Option A):
@@ -115,6 +128,18 @@ With the stack running and dev sign-in (Option A):
 2. On the client's page, choose **New session for …**. Enter a start such as 2026-11-07 10:30, then save. The session page shows 10:30, whatever your browser's time zone is.
 3. Try **Mark booked**, then **Mark completed**. Only allowed transitions are offered. Archive the session and check that it leaves the list unless **Show archived** is ticked.
 4. Sign in as a second email in a private window. That user's workspace shows none of the first user's data. Pasting a session URL from the first user shows "not found".
+
+### Photo uploads: a quick manual check
+
+With the stack running and dev sign-in:
+
+1. Open a session and choose **Upload photos**. Pick a few JPEG or PNG files, including a portrait phone photo.
+2. Each file shows "uploading…", then the grid shows "Processing…" and, a few seconds later, the thumbnail. The portrait photo is shown upright. Clicking a thumbnail opens the 2048 px preview.
+3. Rename a text file to `.jpg` and upload it. It ends up "Rejected" with "This file is not a JPEG or PNG image."
+4. A GIF is refused in the browser before anything is sent.
+5. In another user's window, the session URL shows "not found", and the API returns 404 for the photo list.
+
+To see the jobs behind this: `docker compose exec postgres psql -U photospace -c "SELECT job_type, status, attempts, last_error FROM background_jobs ORDER BY created_at DESC LIMIT 5"`.
 
 ### Health endpoints
 
@@ -128,10 +153,11 @@ With the stack running and dev sign-in (Option A):
 ```bash
 cd backend && ./mvnw verify          # unit tests (Surefire) + integration tests with Testcontainers (Failsafe); needs Docker
 cd frontend && npm ci && npm run lint && npm run typecheck && npm test && npm run build
+cd infra && npm ci && npm run typecheck && npm test && npx cdk synth -q -c env=staging -c appOrigin=https://staging.example.com
 ```
 
 - Backend unit tests only: `./mvnw test`.
-- Integration tests are the `*IT.java` classes. They share one application context and one clean PostgreSQL 18 container, and run every Flyway migration from scratch. They talk to the app over real HTTP with session and CSRF cookies (`support/ApiClient`).
+- Integration tests are the `*IT.java` classes. They share one application context and one set of clean containers (PostgreSQL 18, S3Mock, ElasticMQ), and run every Flyway migration from scratch. They talk to the app over real HTTP with session and CSRF cookies (`support/ApiClient`), upload to presigned URLs, and wait for the real job worker.
 - Frontend tests in watch mode: `npm run test:watch`.
 
 ### Database migrations
@@ -140,7 +166,11 @@ Migrations are in `backend/src/main/resources/db/migration` and are named `V<n>_
 
 ### CI
 
-`.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It has two jobs: the backend job runs `./mvnw verify`, and the frontend job runs lint, typecheck, test, and build.
+`.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It has three jobs: the backend job runs `./mvnw verify`, the frontend job runs lint, typecheck, test, and build, and the infra job runs typecheck, test, and `cdk synth`.
+
+### Infrastructure
+
+`infra/` defines one storage stack per environment: the private photo bucket and the job queue with its dead-letter queue. See `infra/README.md`. Nothing has been deployed yet; deployment arrives with Milestone 8.
 
 ## Status
 
