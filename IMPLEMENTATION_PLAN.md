@@ -425,10 +425,59 @@ sequentially and keep each change small enough to review and test.
     the AWS CLI. These must be installed before Milestone 1 (see the
     README prerequisites).
 
-### Milestone 1: next
+### Milestone 1: done (2026-10-15)
 
-Proposed sequence: Docker Compose with PostgreSQL, then a Spring Boot
-skeleton (Maven wrapper, Flyway, health endpoint, Testcontainers
-integration test), then a Vite React app calling the health endpoint,
-then GitHub Actions CI for both, then the documented commands in the
-README.
+-   **Local stack:** `compose.yaml` runs PostgreSQL 18 on
+    `127.0.0.1:5432`. `.env.example` documents the optional overrides
+    (port and datasource).
+-   **Backend** (`backend/`): Spring Boot 4.1.1 on Java 25, with the
+    Maven wrapper (Maven 3.10). It includes Web MVC, Actuator, JDBC,
+    Flyway, and the PostgreSQL driver.
+    -   `V1__baseline.sql` creates the Flyway history and records
+        schema conventions. Business tables start in Milestone 2.
+    -   `GET /api/health` reports app and database status, or HTTP 503
+        when the database is down. The actuator exposes only liveness
+        and readiness probes, with details hidden. Error responses
+        never include stack traces or messages.
+-   **Backend tests:**
+    -   `HealthControllerTest` (WebMvc slice): UP and DOWN responses.
+    -   `BackendApplicationIT` (Testcontainers `postgres:18`): Flyway
+        applies V1 to a clean database, `/api/health` is UP, the
+        actuator probes are UP with no details, and `/actuator/env`
+        is not exposed.
+-   **Frontend** (`frontend/`): Vite 8, React 19, and TypeScript 6.
+    -   The home page calls `/api/health` through the Vite dev proxy
+        and shows loading, UP/DOWN, and unreachable states.
+    -   Vitest and Testing Library tests cover all four states.
+    -   oxlint runs with warnings treated as errors.
+-   **CI:** `.github/workflows/ci.yml` runs on pull requests and
+    pushes to `main`. The backend job runs `./mvnw -B verify`. The
+    frontend job runs `npm ci`, lint, typecheck, test, and build. The
+    workflow was checked with actionlint.
+-   **Decisions:** D4 (local and test stack) and D5 (health endpoints)
+    in `docs/decisions.md`.
+-   **Verified locally on 2026-10-15:**
+    -   `./mvnw verify`: 2 unit tests and 4 integration tests passed.
+    -   `npm run lint && npm run typecheck && npm test && npm run build`:
+        4 tests passed and the build succeeded.
+    -   Manual end-to-end check: `docker compose up -d --wait`, then
+        `./mvnw spring-boot:run` and `npm run dev`. `curl
+        localhost:5173/api/health` returned `{"status":"UP","database":"UP"}`
+        through the proxy. The `flyway_schema_history` table in the
+        Compose database showed V1 succeeded. After `docker compose stop
+        postgres`, the endpoint returned HTTP 503 with the database DOWN.
+-   **Known gaps:**
+    -   CI has not run on GitHub yet. It runs on the first push or pull
+        request.
+    -   There is no backend formatter or static analysis yet. It will be
+        added if review friction justifies it.
+    -   Structured JSON logs and correlation IDs are not set up yet. They
+        come with the first real API surface in Milestone 2.
+    -   With the database down, `/api/health` can wait up to Hikari's default
+        30s connection timeout before it returns 503. Tune this in
+        Milestone 8.
+
+### Milestone 2: next
+
+Identity, workspaces, and authorization (Google OIDC and server-side
+sessions).

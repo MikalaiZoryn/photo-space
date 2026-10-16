@@ -1,0 +1,23 @@
+# Local development services. Start with: docker compose up -d
+# Credentials here are for a local throwaway database only; never reuse them elsewhere.
+name: photo-space
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: photospace
+      POSTGRES_USER: photospace
+      POSTGRES_PASSWORD: photospace
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U photospace -d photospace"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
