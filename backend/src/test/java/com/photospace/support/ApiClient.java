@@ -51,6 +51,16 @@ public final class ApiClient {
         return send("GET", path, null, false);
     }
 
+    /** A GET with extra request headers, such as a gallery visitor's share token. */
+    public Response getWithHeaders(String path, Map<String, String> headers) {
+        return send("GET", path, null, false, headers);
+    }
+
+    /** A POST without a body, with extra request headers. */
+    public Response postWithHeaders(String path, Map<String, String> headers) {
+        return send("POST", path, null, true, headers);
+    }
+
     public Response post(String path, String json) {
         return send("POST", path, json, true);
     }
@@ -113,6 +123,10 @@ public final class ApiClient {
     }
 
     private Response send(String method, String path, String json, boolean withCsrf) {
+        return send(method, path, json, withCsrf, Map.of());
+    }
+
+    private Response send(String method, String path, String json, boolean withCsrf, Map<String, String> headers) {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path))
                 .header("Accept", "application/json")
                 .method(method, json == null
@@ -121,6 +135,7 @@ public final class ApiClient {
         if (json != null) {
             request.header("Content-Type", "application/json");
         }
+        headers.forEach(request::header);
         if (withCsrf) {
             if (!cookies.containsKey(CSRF_COOKIE)) {
                 get("/api/auth/csrf");

@@ -14,13 +14,17 @@ import com.photospace.workspaces.WorkspaceContext;
 import java.net.URI;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -176,6 +180,44 @@ public class AssetService {
             throw new ConflictException("This upload would exceed the workspace's storage limit of "
                     + megabytes(properties.workspaceQuotaBytes()) + " MB.");
         }
+    }
+
+    // --- Used by galleries, which authorize access to the workspace themselves (membership or a share link). ---
+
+    /** The {@code READY} photos of one session among {@code assetIds}, by ID. Any other ID is left out. */
+    @Transactional(readOnly = true)
+    public Map<UUID, AssetView> findReady(UUID workspaceId, UUID sessionId, Collection<UUID> assetIds) {
+        if (assetIds.isEmpty()) {
+            return Map.of();
+        }
+        return jdbc.sql("SELECT " + COLUMNS + """
+                         FROM photo_assets
+                        WHERE workspace_id = :workspaceId AND session_id = :sessionId AND status = 'READY'
+                          AND id IN (:ids)
+                        """)
+                .param("workspaceId", workspaceId)
+                .param("sessionId", sessionId)
+                .param("ids", assetIds)
+                .query(AssetService::assetRow)
+                .stream()
+                .map(this::view)
+                .collect(Collectors.toMap(AssetView::id, Function.identity()));
+    }
+
+    /**
+     * A short-lived URL that downloads a {@code READY} photo's original or preview as a file named after the
+     * uploaded file. Empty if the photo is not {@code READY} or not in this workspace.
+     */
+    @Transactional(readOnly = true)
+    public Optional<URI> downloadUrl(UUID workspaceId, UUID assetId, PhotoFile file, Duration validFor) {
+        return find(workspaceId, assetId, false)
+                .filter(asset -> asset.status() == AssetStatus.READY)
+                .map(asset -> switch (file) {
+                    case ORIGINAL -> storage.presignAttachment(
+                            asset.originalKey(), asset.originalFilename(), asset.contentType(), validFor);
+                    case PREVIEW -> storage.presignAttachment(
+                            asset.previewKey(), FileNames.previewOf(asset.originalFilename()), "image/jpeg", validFor);
+                });
     }
 
     // --- Used by processing and cleanup, which run without a signed-in user. ---

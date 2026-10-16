@@ -27,6 +27,8 @@ class ApiRouteAuthorizationIT {
             "/api/auth/csrf", // public
             "/api/me", // the signed-in user
             "/api/workspaces", // the signed-in user's memberships
+            "/api/public/gallery", // a gallery visitor, authorized by a share link token
+            "/api/public/gallery/photos/{assetId}/download", // the same
             "/api/dev/login", // test classpath only
             "/error");
 

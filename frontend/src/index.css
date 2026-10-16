@@ -198,6 +198,38 @@ main {
   color: #cf222e;
 }
 
+.photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.public-grid button {
+  margin-top: 0.25rem;
+}
+
+.new-link {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #1a7f37;
+  border-radius: 0.375rem;
+}
+
+.new-link input {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.gallery-published,
+.link-active {
+  color: #1a7f37;
+}
+
+.link-expired,
+.link-revoked {
+  color: #6e7781;
+}
+
 fieldset {
   border: 1px solid #d0d7de;
   border-radius: 0.375rem;
@@ -221,7 +253,13 @@ fieldset {
   }
 
   .status-completed,
-  .status-delivered {
+  .status-delivered,
+  .gallery-published,
+  .link-active {
     color: #3fb950;
+  }
+
+  .new-link {
+    border-color: #3fb950;
   }
 }

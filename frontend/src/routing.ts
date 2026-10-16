@@ -13,6 +13,8 @@ export type Route =
   | { page: 'client'; id: string }
   | { page: 'clientNew' }
   | { page: 'clientEdit'; id: string }
+  | { page: 'galleries' }
+  | { page: 'gallery'; id: string }
   | { page: 'members' }
 
 export function parseRoute(hash: string): Route {
@@ -29,6 +31,10 @@ export function parseRoute(hash: string): Route {
     if (id) return { page: 'client', id }
     return { page: 'clients' }
   }
+  if (section === 'galleries') {
+    if (id) return { page: 'gallery', id }
+    return { page: 'galleries' }
+  }
   if (section === 'members') return { page: 'members' }
   return { page: 'sessions' }
 }
@@ -42,7 +48,37 @@ export const paths = {
   client: (id: string) => `#/clients/${encodeURIComponent(id)}`,
   clientNew: () => '#/clients/new',
   clientEdit: (id: string) => `#/clients/${encodeURIComponent(id)}/edit`,
+  galleries: () => '#/galleries',
+  gallery: (id: string) => `#/galleries/${encodeURIComponent(id)}`,
   members: () => '#/members',
+}
+
+/**
+ * A gallery visitor's link: `#/g/<token>`. The token is in the fragment, which browsers never send to a server,
+ * so it stays out of request lines, access logs, and Referer headers.
+ */
+export function publicGalleryHash(token: string): string {
+  return `#/g/${token}`
+}
+
+/**
+ * The share token in a visitor's link, or null if `hash` is not a visitor's link. Any `#/g/…` is one, even with
+ * a mangled token: the visitor then sees that the link does not work, not a sign-in page.
+ */
+export function publicGalleryToken(hash: string): string | null {
+  const match = /^#\/g\/(.*)$/.exec(hash)
+  return match ? match[1] : null
+}
+
+/** The share token of the current page, kept up to date as the hash changes. */
+export function usePublicGalleryToken(): string | null {
+  const [token, setToken] = useState(() => publicGalleryToken(window.location.hash))
+  useEffect(() => {
+    const update = () => setToken(publicGalleryToken(window.location.hash))
+    window.addEventListener('hashchange', update)
+    return () => window.removeEventListener('hashchange', update)
+  }, [])
+  return token
 }
 
 export function navigate(hash: string) {

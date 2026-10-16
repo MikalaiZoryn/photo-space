@@ -60,6 +60,11 @@ app:
       enabled: ${ASSETS_CLEANUP_ENABLED:true}
       interval: 1h
       abandoned-after: 24h
+  # Private galleries and share links (D14).
+  galleries:
+    max-photos: 500
+    max-link-days: 365
+    download-url-validity: 5m
 
 management:
   endpoints:

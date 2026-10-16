@@ -837,8 +837,125 @@ sequentially and keep each change small enough to review and test.
     -   Limits are global configuration, not per-workspace plans
         (Milestone 11).
 
-### Milestone 5: next
+### Milestone 5: done (2026-10-16)
 
-Private galleries and downloads: galleries built from ready assets,
-expiring and revocable share tokens (hashes only), and short-lived
-download URLs.
+-   **Schema:** `V6__galleries.sql` adds `galleries`, `gallery_assets`,
+    `gallery_share_links`, and `gallery_access_events`. Composite
+    foreign keys on `(workspace_id, session_id, id)` make every gallery
+    photo a photo of the gallery's own session and workspace. Deleting
+    a photo removes it from galleries. A link stores only the SHA-256
+    of its token, and its expiry is required. An event records only
+    link, kind, photo, and time.
+-   **Gallery management** (`galleries` module, D14), under
+    `/api/workspaces/{id}/galleries`: list (by session, archived),
+    create (a draft for a non-archived session), get with ordered
+    photos, settings `PUT` (title and downloads `NONE`, `PREVIEWS`, or
+    `ORIGINALS`, with a version), `PUT …/photos` (the whole ordered
+    list, ready photos of the session only, at most 500, with a
+    version), status (`DRAFT` or `PUBLISHED`; an empty gallery can't be
+    published and a published one can't be emptied), and archive and
+    restore. Follows D10.
+-   **Share links:** `POST …/links {validDays}` (1–365, as 24-hour
+    periods) returns the 43-character token once. List shows the state
+    (`ACTIVE`, `EXPIRED`, `REVOKED`), views, downloads, and last use.
+    Revoke is idempotent. Links are never deleted.
+-   **Visitor API:** `GET /api/public/gallery` and `POST
+    /api/public/gallery/photos/{assetId}/download`, with the token in
+    `X-Gallery-Token`. Anything but a live link to a published,
+    unarchived gallery gets the same 404, and so does a photo outside
+    the gallery. Downloads follow the gallery setting (403 when none
+    are allowed). Download URLs are valid for 5 minutes and sign
+    `Content-Disposition: attachment` with the uploaded name (an
+    RFC 8187 UTF-8 name plus an ASCII fallback). The response holds
+    no workspace, session, or link IDs and no file names. Views and
+    downloads are recorded per link.
+-   **Assets and storage:** `AssetService.findReady` and `downloadUrl`
+    for galleries. `ObjectStorage.presignAttachment` signs the response
+    disposition and type. `WorkspaceService.name` gives the studio name
+    for visitors.
+-   **Frontend:** a Galleries tab and a Galleries section on each
+    session (create with title and downloads). The gallery page has
+    publish and unpublish, archive and restore, settings, the photos in
+    order (earlier, later, remove), a picker for the session's ready
+    photos (add one, add all), and share links: create with a validity,
+    the URL shown once with Copy, usage, and revoke. The visitor page
+    `#/g/<token>` skips sign-in and every workspace call. It shows the
+    studio, the expiry, thumbnails, previews, and download buttons when
+    allowed, and a plain message for a link that doesn't work. No new
+    dependencies.
+-   **Docs:** D14. ARCHITECTURE §6 (gallery tables) and §8 (retention
+    and deletion of gallery data).
+-   **Verified locally on 2026-10-16:**
+    -   `cd backend && ./mvnw verify`: 37 unit tests and 88 integration
+        tests passed.
+        -   `GalleriesIT` (9): the full flow with real uploads, worker,
+            and S3Mock: create, order, publish, and a link. The stored
+            value is the SHA-256 of the token, and the token is never
+            in a list. The visitor sees the photos in order, with no
+            IDs or file names outside presigned URLs and no session
+            cookie. The original downloads byte for byte with the
+            signed `Content-Disposition`, and the view and download are
+            recorded. Download settings: `NONE` gets 403 and is not
+            recorded; `PREVIEWS` and `ORIGINALS` sign the right key and
+            name. Unpublished, archived, expired, and revoked links get
+            404, and work again after republishing or restoring.
+            Revoking is idempotent. Missing, empty, malformed, unknown,
+            SQL-ish, and hash-as-token values get the same 404 and
+            record nothing. A token can't download a photo from
+            another gallery or workspace, and gets 401 on `/api/me` and
+            every workspace route. Photos must be ready, of the
+            session, and not duplicated; versions are checked; and the
+            database refuses another session's or workspace's photo.
+            Validation covers sessions, archived sessions and
+            galleries, titles, downloads, and `validDays`. Lists filter
+            by session and archive state. Cross-workspace denial covers
+            every route through both the foreign and the own workspace
+            path, with no side effects.
+        -   `ShareTokensTest` (3), `ContentDispositionsTest` (3: plain,
+            non-ASCII, quote injection), `FileNamesTest` (preview
+            names). `ApiRouteAuthorizationIT` allow-lists the 2 visitor
+            routes; the 9 gallery routes are workspace-scoped.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 60 tests passed (11 new in
+        `Galleries.test.tsx`) and the build succeeded.
+    -   Manual run (`docker compose up -d --wait`,
+        `spring-boot:test-run -Dspring-boot.run.profiles=compose-db`,
+        a Python script against `:8080`, and the Vite proxy):
+        -   V6 migrated on the existing Compose database (with
+            Milestone 4 data).
+        -   Two uploaded PNGs, a gallery, a reorder, publish, and a
+            30-day link. The visitor got the gallery (`Cache-Control:
+            no-store`), only an `XSRF-TOKEN` cookie, and an original
+            download with `filename*=UTF-8''%C5%81%C3%B3d%C5%BA%201.png`.
+            The visitor got 401 on `/api/me` and, after revoking, 404
+            (also through the Vite proxy). The link list showed 1 view
+            and 1 download. A second user got 404 for the gallery.
+        -   The backend log had no share token, no presigned
+            signatures, no file names, and no emails.
+-   **Known gaps:**
+    -   Not deployed. Real S3 enforcement of signed response headers
+        and block public access is still unverified on AWS (Milestone
+        8). S3Mock honored `response-content-disposition`.
+    -   The gallery pages were not clicked through in a real browser.
+        Component tests and the scripted run cover them. Worth a
+        manual pass: README, "Galleries: a quick manual check".
+    -   No rate limiting on the visitor API. Tokens can't be guessed,
+        but each visit writes an event row. WAF and throttling come
+        with Milestone 8.
+    -   Presigned URLs already handed out keep working for up to 10
+        minutes (previews) or 5 minutes (downloads) after a link is
+        revoked.
+    -   A visitor page open longer than 10 minutes needs a reload for
+        fresh images, and each reload counts as a view.
+    -   One session per gallery, one download setting per gallery, no
+        zip of a whole gallery, no favourites or client selections, and
+        no email sending of links (the photographer copies the URL).
+    -   Photo deletion is not built. The retention rules for it are
+        documented in ARCHITECTURE §8.
+
+### Milestone 6: next
+
+AI content studio, first vertical slice: a brand profile, a
+provider-neutral generation interface (configurable and mockable),
+caption drafts from selected photos and session notes, versioned
+editable drafts, and explicit approval before anything is published.

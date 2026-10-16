@@ -21,7 +21,8 @@ import org.springframework.security.web.savedrequest.NullRequestCache;
  * HTTP security for the API.
  *
  * <ul>
- *   <li>Everything requires an authenticated session except health, the sign-in endpoints, and errors.
+ *   <li>Everything requires an authenticated session except health, the sign-in endpoints, errors, and the
+ *       gallery visitor API under {@code /api/public/}, which authorizes each request by its share link token.
  *   <li>Unauthenticated API calls get 401 (never a redirect) and do not create a session.
  *   <li>State-changing requests need the CSRF token: the SPA reads the {@code XSRF-TOKEN} cookie and sends it
  *       back in the {@code X-XSRF-TOKEN} header.
@@ -47,6 +48,7 @@ class SecurityConfig {
                                 "/api/health",
                                 "/api/auth/options",
                                 "/api/auth/csrf",
+                                "/api/public/**",
                                 "/actuator/health",
                                 "/actuator/health/**",
                                 "/error")

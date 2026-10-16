@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { ClientDetail, EditClient, NewClient } from './clients/ClientDetail.tsx'
 import { ClientsPage } from './clients/ClientsPage.tsx'
 import { CreateWorkspaceForm } from './CreateWorkspaceForm.tsx'
+import { GalleriesPage } from './galleries/GalleriesPage.tsx'
+import { GalleryPage } from './galleries/GalleryPage.tsx'
 import { listMembers, listWorkspaces, type Workspace } from './api/workspaces.ts'
 import { navigate, paths, useRoute, type Route } from './routing.ts'
 import { EditSession, NewSession, SessionDetail } from './sessions/SessionDetail.tsx'
@@ -89,7 +91,13 @@ export function Workspaces() {
 
 function WorkspaceHome({ workspace }: { workspace: Workspace }) {
   const route = useRoute()
-  const section = route.page.startsWith('client') ? 'clients' : route.page === 'members' ? 'members' : 'sessions'
+  const section = route.page.startsWith('client')
+    ? 'clients'
+    : route.page.startsWith('galler')
+      ? 'galleries'
+      : route.page === 'members'
+        ? 'members'
+        : 'sessions'
 
   return (
     <section aria-labelledby="workspace-heading">
@@ -100,6 +108,9 @@ function WorkspaceHome({ workspace }: { workspace: Workspace }) {
         </a>
         <a href={paths.clients()} aria-current={section === 'clients' ? 'page' : undefined}>
           Clients
+        </a>
+        <a href={paths.galleries()} aria-current={section === 'galleries' ? 'page' : undefined}>
+          Galleries
         </a>
         <a href={paths.members()} aria-current={section === 'members' ? 'page' : undefined}>
           Members
@@ -129,6 +140,10 @@ function RoutedPage({ workspace, route }: { workspace: Workspace; route: Route }
       return <NewClient workspaceId={workspaceId} />
     case 'clientEdit':
       return <EditClient key={route.id} workspaceId={workspaceId} clientId={route.id} />
+    case 'galleries':
+      return <GalleriesPage workspaceId={workspaceId} timezone={timezone} />
+    case 'gallery':
+      return <GalleryPage key={route.id} workspaceId={workspaceId} galleryId={route.id} timezone={timezone} />
     case 'members':
       return <MembersPage workspace={workspace} />
   }

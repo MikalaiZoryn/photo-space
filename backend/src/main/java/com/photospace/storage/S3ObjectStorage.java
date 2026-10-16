@@ -55,6 +55,17 @@ class S3ObjectStorage implements ObjectStorage {
     }
 
     @Override
+    public URI presignAttachment(String key, String filename, String contentType, Duration validFor) {
+        return toUri(presigner.presignGetObject(request -> request
+                        .signatureDuration(validFor)
+                        .getObjectRequest(get -> get.bucket(bucket)
+                                .key(key)
+                                .responseContentDisposition(ContentDispositions.attachment(filename))
+                                .responseContentType(contentType)))
+                .url());
+    }
+
+    @Override
     public Optional<Long> size(String key) {
         try {
             return Optional.of(s3.headObject(head -> head.bucket(bucket).key(key)).contentLength());

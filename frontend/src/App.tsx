@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchAuthOptions, fetchMe, signOut, type AuthOptions, type Me } from './api/auth.ts'
+import { PublicGalleryPage } from './galleries/PublicGalleryPage.tsx'
+import { usePublicGalleryToken } from './routing.ts'
 import { SignIn } from './SignIn.tsx'
 import { SystemStatus } from './SystemStatus.tsx'
 import { Workspaces } from './Workspaces.tsx'
@@ -11,6 +13,19 @@ type Session =
   | { kind: 'signedIn'; me: Me }
 
 function App() {
+  const galleryToken = usePublicGalleryToken()
+  // A gallery visitor's link: only that gallery, without the sign-in flow or any workspace API call.
+  if (galleryToken !== null) {
+    return (
+      <main>
+        <PublicGalleryPage key={galleryToken} token={galleryToken} />
+      </main>
+    )
+  }
+  return <WorkspaceApp />
+}
+
+function WorkspaceApp() {
   const [session, setSession] = useState<Session>({ kind: 'loading' })
   const [reloadCount, setReloadCount] = useState(0)
   const [signInFailed] = useState(() => new URLSearchParams(window.location.search).has('signInError'))
