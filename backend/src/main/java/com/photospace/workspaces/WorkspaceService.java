@@ -5,6 +5,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -78,6 +79,17 @@ public class WorkspaceService {
                 .param("userId", workspace.userId())
                 .query(WorkspaceService::workspaceView)
                 .optional()
+                .orElseThrow(NotFoundException::new);
+    }
+
+    /** The workspace's time zone, in which session times are entered and shown. */
+    @Transactional(readOnly = true)
+    public ZoneId zone(WorkspaceContext workspace) {
+        return jdbc.sql("SELECT timezone FROM workspaces WHERE id = :workspaceId")
+                .param("workspaceId", workspace.workspaceId())
+                .query(String.class)
+                .optional()
+                .map(ZoneId::of)
                 .orElseThrow(NotFoundException::new);
     }
 

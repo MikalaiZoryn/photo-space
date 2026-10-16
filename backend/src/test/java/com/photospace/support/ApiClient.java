@@ -38,6 +38,15 @@ public final class ApiClient {
         return this;
     }
 
+    /** Creates a workspace owned by this user and returns its ID. */
+    public String createWorkspace(String name, String timezone) {
+        Response response = post("/api/workspaces", "{\"name\":\"%s\",\"timezone\":\"%s\"}".formatted(name, timezone));
+        if (response.status() != 201) {
+            throw new IllegalStateException("Workspace creation failed: " + response.status());
+        }
+        return response.json("$.id");
+    }
+
     public Response get(String path) {
         return send("GET", path, null, false);
     }
@@ -48,6 +57,11 @@ public final class ApiClient {
 
     public Response put(String path, String json) {
         return send("PUT", path, json, true);
+    }
+
+    /** A POST without a body, such as an archive action. */
+    public Response post(String path) {
+        return send("POST", path, null, true);
     }
 
     /** A state-changing request that omits the CSRF header, as a cross-site form or script would. */

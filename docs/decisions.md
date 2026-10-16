@@ -67,3 +67,27 @@ A short record of decisions that the project documents left open. Add new entrie
   - Roles are `OWNER` and `MEMBER` only.
   - Dev sign-in (`POST /api/dev/login`, a password-less "dev" identity) lives in `src/test` and runs through `./mvnw spring-boot:test-run`. It is never compiled into the application jar, so no profile or property can enable it in a deployed environment. Dev identities use their own provider, so they can't collide with Google identities.
 - **Consequences:** new modules get authorization by putting their routes under the workspace prefix. Inviting members is not built yet (out of Milestone 2 scope); integration tests insert memberships directly.
+
+## D9: Session times are entered as workspace wall-clock time and stored as UTC
+
+- **Date:** 2026-10-15 (Milestone 3)
+- **Decision:**
+  - The API takes a session's start and end as local date-times without an offset (`startLocal`, `endLocal`, e.g. `2026-11-07T10:30`), meaning wall-clock time in the workspace's time zone. The server converts them with `java.time` and stores UTC `TIMESTAMPTZ` values.
+  - A local time that doesn't exist because clocks jump forward is rejected with a field error. A time that happens twice because clocks fall back resolves to the earlier instant. Years outside 2000–2100 are rejected.
+  - Responses return both the UTC instants (`startsAt`, `endsAt`) and the same moments as wall-clock times in the workspace's *current* zone (`startLocal`, `endLocal`, `timezone`). The UI displays the instants with `Intl.DateTimeFormat` in that zone, never in the browser's own zone.
+  - Changing the workspace time zone keeps each session's instant; only its displayed wall-clock time changes.
+- **Why:** the server owns the workspace zone, and `java.time` makes the daylight-saving policy explicit and unit-testable. The browser then needs no time zone arithmetic beyond formatting.
+- **Consequences:** future calendar sync (Milestone 10) works with the stored instants. All-day sessions aren't modelled; a session is either unscheduled or has a start time.
+
+## D10: Record lifecycle conventions for workspace resources
+
+- **Date:** 2026-10-15 (Milestone 3)
+- **Decision:**
+  - **Archive, don't delete.** Clients and sessions get `archived_at`. Archived records leave default lists (`?archived=true` lists them), stay readable, and can't be edited or change status until restored. Archive and restore are idempotent `POST …/archive` and `POST …/restore` actions. A session keeps its link to a client archived later, but can't be newly linked to an archived client.
+  - **Optimistic locking.** Editable records carry `version`. `PUT` takes `{"version": n, "<resource>": {…fields}}` and returns 409 with a fixed, safe `detail` if the version is stale.
+  - **Status changes have their own endpoint.** `POST …/sessions/{id}/status` is the only way to change a session's status. It enforces the transition table in `SessionStatus` and returns 409 for a disallowed change. New sessions always start as `INQUIRY`, and `PUT` never touches status. Responses list `allowedStatuses`, so the UI doesn't duplicate the rules.
+  - **Lists are paged** with `page` (from 0) and `size` (1–100, default 25), sorted stably (with `id` as the final tiebreaker), and return `{items, page, size, totalItems}`.
+  - **Malformed IDs in the path return 404**, the same as unknown and foreign ones. Malformed query parameters return 400 with per-field `errors`.
+  - **Cross-module links stay inside the workspace at the database level too.** A link to another module's record uses a composite foreign key on `(workspace_id, <id>)`, as `photo_sessions` does with `clients`.
+- **Why:** archiving keeps history for galleries, content, and tasks that will link to these records. A single status endpoint gives later workflows (Milestone 7) and auditing one place to hook into.
+- **Consequences:** later resources (galleries, tasks) follow the same conventions. Hard deletion for data-retention requests is a separate, later feature.

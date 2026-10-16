@@ -12,6 +12,8 @@ function workspace(id: string, name: string) {
   return { id, name, timezone: 'Europe/Warsaw', role: 'OWNER', createdAt: '2026-10-15T10:00:00Z' }
 }
 
+const emptyPage = () => json({ items: [], page: 0, size: 25, totalItems: 0 })
+
 function members() {
   return json([{ userId: 'user-1', displayName: 'alice@example.com', role: 'OWNER', joinedAt: '2026-10-15T10:00:00Z' }])
 }
@@ -84,6 +86,7 @@ describe('App', () => {
         return json(created, 201)
       },
       'GET /api/workspaces/ws-1/members': members,
+      'GET /api/workspaces/ws-1/sessions': emptyPage,
     })
 
     render(<App />)
@@ -95,6 +98,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     expect(await screen.findByRole('heading', { name: 'Alice Studio' })).toBeTruthy()
+    expect(await screen.findByText(/No sessions yet/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('link', { name: 'Members' }))
     expect(await screen.findByText('alice@example.com (owner)')).toBeTruthy()
     expect(headersOf(fetch, 'POST', '/api/workspaces')['X-XSRF-TOKEN']).toBe('csrf-token')
     expect(JSON.parse(String(fetch.mock.calls.find(([p, i]) => p === '/api/workspaces' && i?.method === 'POST')?.[1]?.body)))
@@ -121,20 +126,27 @@ describe('App', () => {
 
   it('opens the last selected workspace and switches between workspaces', async () => {
     window.localStorage.setItem('photospace.selectedWorkspace', 'ws-2')
+    window.location.hash = '#/clients/c-from-ws-2'
+    const notFound = () => json({ status: 404, title: 'Not Found' }, 404)
     mockApi({
       'GET /api/me': () => json(me),
       'GET /api/auth/options': options(null, false),
       'GET /api/health': health,
       'GET /api/workspaces': () => json([workspace('ws-1', 'Alpha'), workspace('ws-2', 'Beta')]),
-      'GET /api/workspaces/ws-1/members': members,
-      'GET /api/workspaces/ws-2/members': members,
+      'GET /api/workspaces/ws-1/sessions': emptyPage,
+      'GET /api/workspaces/ws-2/sessions': emptyPage,
+      'GET /api/workspaces/ws-2/clients/c-from-ws-2': notFound,
     })
 
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Beta' })).toBeTruthy()
+    expect(await screen.findByText(/This client was not found/)).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-1' } })
     expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeTruthy()
+    // Record IDs in the URL belonged to the other workspace, so switching opens the sessions list.
+    expect(await screen.findByText(/No sessions yet/)).toBeTruthy()
+    expect(window.location.hash).toBe('#/sessions')
     expect(window.localStorage.getItem('photospace.selectedWorkspace')).toBe('ws-1')
   })
 
@@ -145,7 +157,7 @@ describe('App', () => {
       'GET /api/auth/options': options(null, false),
       'GET /api/health': health,
       'GET /api/workspaces': () => json([workspace('ws-1', 'Alpha')]),
-      'GET /api/workspaces/ws-1/members': members,
+      'GET /api/workspaces/ws-1/sessions': emptyPage,
     })
 
     render(<App />)
