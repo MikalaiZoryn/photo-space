@@ -123,7 +123,8 @@ export function updateBrandProfile(workspaceId: string, version: number, profile
 
 export function listBatches(
   workspaceId: string,
-  query: { sessionId?: string; page?: number; size?: number },
+  /** `toReview` keeps only batches with drafts not approved yet. */
+  query: { sessionId?: string; toReview?: boolean; page?: number; size?: number },
   signal?: AbortSignal,
 ): Promise<Page<ContentBatch>> {
   return api<Page<ContentBatch>>(withQuery(`${contentPath(workspaceId)}/batches`, query), { signal })

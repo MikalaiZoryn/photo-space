@@ -85,7 +85,7 @@ function WorkspaceApp() {
     forgetInvitation()
     if (workspaceId !== null) writeSelected(workspaceId)
     setInvitation(null)
-    navigate(paths.sessions())
+    navigate(paths.dashboard())
   }
 
   if (session.kind === 'signedIn' && invitation !== null) {
@@ -100,7 +100,14 @@ function WorkspaceApp() {
     )
   }
   if (session.kind === 'signedIn') {
-    return <Workspaces userName={session.me.displayName} onSignOut={handleSignOut} notice={signOutAlert} />
+    return (
+      <Workspaces
+        userId={session.me.id}
+        userName={session.me.displayName}
+        onSignOut={handleSignOut}
+        notice={signOutAlert}
+      />
+    )
   }
   return (
     <CenteredLayout>

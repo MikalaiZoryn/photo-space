@@ -281,6 +281,26 @@ class PhotoSessionsIT {
     }
 
     @Test
+    void listsUpcomingInquiriesAndBookingsSoonestFirst() {
+        String later = alice.post(aliceSessions, session("Later", "2099-09-01T10:00")).json("$.id");
+        String sooner = alice.post(aliceSessions, session("Sooner", "2099-08-01T10:00")).json("$.id");
+        status(later, "BOOKED");
+        String past = alice.post(aliceSessions, session("Past", "2020-08-01T10:00")).json("$.id");
+        status(past, "BOOKED");
+        String cancelled = alice.post(aliceSessions, session("Cancelled", "2099-07-01T10:00")).json("$.id");
+        status(cancelled, "CANCELLED");
+        String archived = alice.post(aliceSessions, session("Archived", "2099-07-02T10:00")).json("$.id");
+        alice.post(aliceSessions + "/" + archived + "/archive");
+        alice.post(aliceSessions, "{\"title\":\"Unscheduled\"}");
+
+        Response upcoming = alice.get(aliceSessions + "?upcoming=true");
+        assertThat(upcoming.<List<String>>json("$.items[*].title")).containsExactly("Sooner", "Later");
+        assertThat(upcoming.<Integer>json("$.totalItems")).isEqualTo(2);
+        assertThat(alice.get(aliceSessions + "?upcoming=true&status=BOOKED").<List<String>>json("$.items[*].title"))
+                .containsExactly("Later");
+    }
+
+    @Test
     void otherWorkspacesCannotReadListOrChangeTheSession() {
         String clientId = alice.post(aliceClients, "{\"name\":\"Anna\"}").json("$.id");
         String id = alice.post(aliceSessions, withClient(clientId)).json("$.id");

@@ -77,11 +77,15 @@ class InquiryService {
         this.audit = audit;
     }
 
-    /** Newest first. Without a status, every inquiry except dismissed ones. */
+    /**
+     * Newest first. Without a status, every inquiry except dismissed ones, or with {@code open} only those still
+     * waiting to be associated or dismissed.
+     */
     @Transactional(readOnly = true)
-    PageView<InquirySummary> list(WorkspaceContext workspace, InquiryStatus status, PageQuery page) {
+    PageView<InquirySummary> list(WorkspaceContext workspace, InquiryStatus status, boolean open, PageQuery page) {
         String where = " WHERE workspace_id = :workspaceId"
-                + (status == null ? " AND status <> 'DISMISSED'" : " AND status = :status");
+                + (status != null ? " AND status = :status"
+                        : open ? " AND status IN ('NEW', 'NEEDS_REVIEW')" : " AND status <> 'DISMISSED'");
         String statusName = status == null ? null : status.name();
         long total = jdbc.sql("SELECT count(*) FROM inquiries" + where)
                 .param("workspaceId", workspace.workspaceId())

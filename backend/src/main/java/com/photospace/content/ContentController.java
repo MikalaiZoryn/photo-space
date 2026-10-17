@@ -65,9 +65,10 @@ class ContentController {
     PageView<BatchView> listBatches(
             WorkspaceContext workspace,
             @RequestParam(required = false) UUID sessionId,
+            @RequestParam(defaultValue = "false") boolean toReview,
             @RequestParam(defaultValue = "0") @Min(0) @Max(PageQuery.MAX_PAGE) int page,
             @RequestParam(defaultValue = "" + PageQuery.DEFAULT_SIZE) @Min(1) @Max(PageQuery.MAX_SIZE) int size) {
-        return content.list(workspace, sessionId, new PageQuery(page, size));
+        return content.list(workspace, sessionId, toReview, new PageQuery(page, size));
     }
 
     /** Queues generation; the batch is {@code PENDING} until the job finishes. Poll the batch for the result. */

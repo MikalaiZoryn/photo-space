@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
  * work without a router dependency. The workspace itself is not in the URL; see Workspaces.tsx.
  */
 export type Route =
+  | { page: 'dashboard' }
   | { page: 'sessions' }
   | { page: 'session'; id: string }
   | { page: 'sessionNew'; clientId: string | null }
@@ -34,6 +35,7 @@ export function parseRoute(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#\/?/, '').split('?')
   const [section, id, action] = path.split('/').map(decodeURIComponent)
   if (section === 'sessions') {
+    if (!id) return { page: 'sessions' }
     if (id === 'new') return { page: 'sessionNew', clientId: new URLSearchParams(query).get('client') }
     if (id && action === 'edit') return { page: 'sessionEdit', id }
     if (id) return { page: 'session', id }
@@ -70,10 +72,11 @@ export function parseRoute(hash: string): Route {
     if (id === 'content-studio') return { page: 'contentStudio' }
     return { page: 'settings' }
   }
-  return { page: 'sessions' }
+  return { page: 'dashboard' }
 }
 
 export const paths = {
+  dashboard: () => '#/dashboard',
   sessions: () => '#/sessions',
   session: (id: string) => `#/sessions/${encodeURIComponent(id)}`,
   sessionNew: (clientId?: string) => (clientId ? `#/sessions/new?client=${encodeURIComponent(clientId)}` : '#/sessions/new'),

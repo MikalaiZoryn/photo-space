@@ -42,6 +42,8 @@ export type SessionQuery = {
   status?: SessionStatus | ''
   clientId?: string
   archived?: boolean
+  /** Only inquiries and booked sessions that start from now on, soonest first. */
+  upcoming?: boolean
   page?: number
   size?: number
 }

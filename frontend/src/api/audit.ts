@@ -14,8 +14,12 @@ export type AuditEvent = {
 }
 
 /** Owners only. */
-export function listAuditEvents(workspaceId: string, page: number, signal?: AbortSignal): Promise<Page<AuditEvent>> {
-  return api<Page<AuditEvent>>(withQuery(`/api/workspaces/${encodeURIComponent(workspaceId)}/audit-events`, { page }), {
+export function listAuditEvents(
+  workspaceId: string,
+  query: { page?: number; size?: number },
+  signal?: AbortSignal,
+): Promise<Page<AuditEvent>> {
+  return api<Page<AuditEvent>>(withQuery(`/api/workspaces/${encodeURIComponent(workspaceId)}/audit-events`, query), {
     signal,
   })
 }

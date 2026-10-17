@@ -181,6 +181,17 @@ class ContentIT {
     }
 
     @Test
+    void listsBatchesWithDraftsLeftToReview() {
+        String batch = generated(1);
+        String draft = firstDraft(batch);
+        assertThat(alice.get(content + "/batches?toReview=true").<List<String>>json("$.items[*].id")).containsExactly(batch);
+
+        setStatus(draft, 1, "APPROVED");
+        assertThat(alice.get(content + "/batches?toReview=true").<Integer>json("$.totalItems")).isZero();
+        assertThat(alice.get(content + "/batches").<Integer>json("$.totalItems")).isEqualTo(1);
+    }
+
+    @Test
     void flagsDetailsThatAreNotInTheNotesOrBrandProfile() {
         String draft = firstDraft(generated(1));
 

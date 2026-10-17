@@ -418,6 +418,7 @@ class InquiriesIT {
         assertThat(count("SELECT count(*) FROM tasks WHERE workspace_id = ?::uuid")).as("only the review task").isEqualTo(1);
 
         assertThat(alice.get(inquiries).<Integer>json("$.totalItems")).as("dismissed are hidden by default").isZero();
+        assertThat(alice.get(inquiries + "?open=true").<Integer>json("$.totalItems")).isZero();
         assertThat(alice.get(inquiries + "?status=DISMISSED").<List<String>>json("$.items[*].id")).containsExactly(id);
 
         // A client with the email was added since: reopening matches again.
@@ -425,6 +426,7 @@ class InquiriesIT {
         Response reopened = alice.post(inquiries + "/" + id + "/reopen", "{\"version\":%d}".formatted(version));
         assertThat(reopened.<String>json("$.status")).isEqualTo("NEEDS_REVIEW");
         assertThat(reopened.<String>json("$.reviewTaskId")).isEqualTo(reviewTask);
+        assertThat(alice.get(inquiries + "?open=true").<List<String>>json("$.items[*].id")).containsExactly(id);
         assertThat(alice.get(base + "/tasks/" + reviewTask).<String>json("$.status")).isEqualTo("OPEN");
         assertThat(alice.get(inquiries).<Integer>json("$.totalItems")).isEqualTo(1);
         assertThat(jdbc.queryForList("SELECT action FROM audit_events WHERE target_id = ?::uuid ORDER BY created_at, id",

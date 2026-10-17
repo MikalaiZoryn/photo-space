@@ -40,9 +40,10 @@ class PhotoSessionController {
             @RequestParam(required = false) SessionStatus status,
             @RequestParam(required = false) UUID clientId,
             @RequestParam(defaultValue = "false") boolean archived,
+            @RequestParam(defaultValue = "false") boolean upcoming,
             @RequestParam(defaultValue = "0") @Min(0) @Max(PageQuery.MAX_PAGE) int page,
             @RequestParam(defaultValue = "" + PageQuery.DEFAULT_SIZE) @Min(1) @Max(PageQuery.MAX_SIZE) int size) {
-        return sessions.list(workspace, status, clientId, archived, new PageQuery(page, size));
+        return sessions.list(workspace, status, clientId, archived, upcoming, new PageQuery(page, size));
     }
 
     @PostMapping

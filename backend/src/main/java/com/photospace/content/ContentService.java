@@ -134,10 +134,16 @@ class ContentService {
         return get(workspace, id);
     }
 
-    /** Batches, newest first, optionally of one session. */
+    /**
+     * Batches, newest first, optionally of one session. {@code toReview} keeps only batches with drafts that are
+     * not approved yet.
+     */
     @Transactional(readOnly = true)
-    PageView<BatchView> list(WorkspaceContext workspace, UUID sessionId, PageQuery page) {
-        String where = " WHERE b.workspace_id = :workspaceId" + (sessionId == null ? "" : " AND b.session_id = :sessionId");
+    PageView<BatchView> list(WorkspaceContext workspace, UUID sessionId, boolean toReview, PageQuery page) {
+        String where = " WHERE b.workspace_id = :workspaceId" + (sessionId == null ? "" : " AND b.session_id = :sessionId")
+                + (toReview
+                        ? " AND EXISTS (SELECT 1 FROM content_drafts d WHERE d.batch_id = b.id AND d.status = 'DRAFT')"
+                        : "");
         long total = jdbc.sql("SELECT count(*) FROM content_batches b" + where)
                 .param("workspaceId", workspace.workspaceId())
                 .param("sessionId", sessionId)
