@@ -92,6 +92,17 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- Outbound email, such as workspace invitations (D20). Only the mail adapter uses it. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sesv2</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <!-- The SDK's default synchronous HTTP client, declared so its timeouts can be configured. -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

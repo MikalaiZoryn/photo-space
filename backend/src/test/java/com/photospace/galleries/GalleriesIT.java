@@ -3,6 +3,7 @@ package com.photospace.galleries;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.photospace.shared.SecretTokens;
 import com.photospace.support.ApiClient;
 import com.photospace.support.ApiClient.Response;
 import com.photospace.support.Eventually;
@@ -178,7 +179,7 @@ class GalleriesIT {
         assertThat(view(token).status()).as("restored and still published").isEqualTo(200);
 
         jdbc.update("UPDATE gallery_share_links SET created_at = now() - interval '8 days',"
-                + " expires_at = now() - interval '1 second' WHERE token_hash = ?", (Object) ShareTokens.hash(expiringToken));
+                + " expires_at = now() - interval '1 second' WHERE token_hash = ?", (Object) SecretTokens.hash(expiringToken));
         assertNotFound(view(expiringToken));
         assertNotFound(download(expiringToken, photo));
 
@@ -217,9 +218,9 @@ class GalleriesIT {
                 "abc",
                 token + "x",
                 token.substring(1),
-                ShareTokens.generate(), // well formed, unknown
+                SecretTokens.generate(), // well formed, unknown
                 "'; DROP TABLE galleries; --" + "a".repeat(16),
-                HexFormat.of().formatHex(ShareTokens.hash(token)).substring(0, 43)); // the stored hash is not a token
+                HexFormat.of().formatHex(SecretTokens.hash(token)).substring(0, 43)); // the stored hash is not a token
         for (String candidate : invalid) {
             assertNotFound(view(candidate));
             assertNotFound(download(candidate, photo));

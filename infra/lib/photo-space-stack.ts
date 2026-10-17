@@ -10,6 +10,7 @@ import * as rds from 'aws-cdk-lib/aws-rds'
 import * as s3 from 'aws-cdk-lib/aws-s3'
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment'
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'
+import * as ses from 'aws-cdk-lib/aws-ses'
 import type { Construct } from 'constructs'
 import type { EnvironmentConfig } from './environments.ts'
 import { Monitoring } from './monitoring.ts'
@@ -23,6 +24,11 @@ export type PhotoSpaceStackProps = StackProps & {
   backendImage: ecs.ContainerImage
   /** The built frontend (frontend/dist). */
   frontendAssets: s3deploy.ISource
+  /**
+   * The address invitation emails come from (D20), as an SES email identity that an operator verifies. Without
+   * it, the backend's email provider stays disabled and invitation emails fail visibly.
+   */
+  mailFrom?: string
 }
 
 const API_PORT = 8080
@@ -270,7 +276,18 @@ export class PhotoSpaceStack extends Stack {
       DB_URL: databaseUrl,
       STORAGE_BUCKET: storage.bucket.bucketName,
       JOBS_QUEUE_URL: storage.jobQueue.queueUrl,
+      // Links in emails, such as invitations, point here.
+      APP_URL: appOrigin,
     }
+    // --- Outbound email (D20): only the worker sends, and only from the one verified sender ---
+    const mailSender = props.mailFrom
+      ? new ses.EmailIdentity(this, 'MailSender', { identity: ses.Identity.email(props.mailFrom) })
+      : undefined
+    const mailEnvironment: Record<string, string> =
+      mailSender && props.mailFrom ? { MAIL_PROVIDER: 'ses', MAIL_FROM: props.mailFrom } : {}
+    const mailPolicy = mailSender
+      ? [new iam.PolicyStatement({ actions: ['ses:SendEmail'], resources: [mailSender.emailIdentityArn] })]
+      : []
     const databaseSecrets = {
       DB_USERNAME: ecs.Secret.fromSecretsManager(databaseSecret, 'username'),
       DB_PASSWORD: ecs.Secret.fromSecretsManager(databaseSecret, 'password'),
@@ -373,7 +390,7 @@ export class PhotoSpaceStack extends Stack {
     const worker = service(
       'worker',
       config.worker,
-      { JOBS_DISPATCHER_ENABLED: 'false', JOBS_WORKER_ENABLED: 'true', ASSETS_CLEANUP_ENABLED: 'true' },
+      { JOBS_DISPATCHER_ENABLED: 'false', JOBS_WORKER_ENABLED: 'true', ASSETS_CLEANUP_ENABLED: 'true', ...mailEnvironment },
       {},
       [
         // Reads originals and previews, writes derivatives, deletes rejected and abandoned uploads.
@@ -386,6 +403,7 @@ export class PhotoSpaceStack extends Stack {
           actions: ['sqs:ReceiveMessage', 'sqs:DeleteMessage'],
           resources: [storage.jobQueue.queueArn],
         }),
+        ...mailPolicy,
       ],
     )
 

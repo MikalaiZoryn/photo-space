@@ -9,9 +9,11 @@ type Props = {
   options: AuthOptions
   signInFailed: boolean
   onSignedIn: () => void
+  /** Replaces the line under the heading, e.g. to explain which account accepts an invitation. */
+  intro?: string
 }
 
-export function SignIn({ options, signInFailed, onSignedIn }: Props) {
+export function SignIn({ options, signInFailed, onSignedIn, intro }: Props) {
   const hasMethod = options.googleSignInUrl !== null || options.devLogin
 
   return (
@@ -20,7 +22,9 @@ export function SignIn({ options, signInFailed, onSignedIn }: Props) {
         <h2 id="sign-in-heading" className="text-2xl font-semibold">
           Sign in
         </h2>
-        <p className="text-sm text-muted-foreground">Manage your clients, sessions, and galleries in one place.</p>
+        <p className="text-sm text-muted-foreground">
+          {intro ?? 'Manage your clients, sessions, and galleries in one place.'}
+        </p>
       </div>
       {signInFailed && <ErrorAlert>Sign-in did not complete. Please try again.</ErrorAlert>}
       {options.googleSignInUrl && (

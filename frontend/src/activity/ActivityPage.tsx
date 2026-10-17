@@ -34,6 +34,10 @@ const actionLabels: Record<string, string> = {
   INQUIRY_ASSOCIATED: 'Linked an inquiry to a client',
   INQUIRY_DISMISSED: 'Dismissed an inquiry',
   INQUIRY_REOPENED: 'Reopened an inquiry',
+  INVITATION_CREATED: 'Invited someone to the workspace',
+  INVITATION_RESENT: 'Resent an invitation',
+  INVITATION_REVOKED: 'Revoked an invitation',
+  INVITATION_ACCEPTED: 'Joined the workspace from an invitation',
 }
 
 /** Where an event's record can be opened, if it still has a page of its own. */
@@ -54,6 +58,8 @@ function targetHref(event: AuditEvent): string | null {
       return paths.inquiryForm()
     case 'BRANDING':
       return paths.branding()
+    case 'INVITATION':
+      return paths.members()
     default:
       return null
   }

@@ -1539,3 +1539,81 @@ also cover this milestone's CloudFront and WAF changes.
         versioned).
     -   The embed has a fixed height; there is no resizing script.
     -   Inquiries have no retention policy or deletion yet.
+
+### Out of plan: workspace invitations by email (code done 2026-10-17; not deployed, no browser run)
+
+Requested by the user while Milestone 9 was code-complete; it is not one
+of the numbered milestones (the closest is Milestone 12's onboarding
+work). Built on the branch `workspace-invitations` on top of Milestone 9.
+
+-   **Repository repair first:** the local `.git` had 106 empty object
+    files (including the unpushed Milestone 9 commit). A full copy of
+    the folder was kept in `~/projects/photo-space-backup-2026-10-17`,
+    `.git` was replaced by a fresh clone of `origin` (every other local
+    branch matched `origin`), and Milestone 9 was committed again from
+    the working tree.
+-   **Schema:** `V10__workspace_invitations.sql` adds
+    `workspace_invitations` (lower-cased email, `MEMBER` role, status,
+    SHA-256 of the newest token, expiry, email status and send count,
+    inviting, accepting, and revoking users) with one open invitation
+    per workspace and address.
+-   **Backend** (D20): new `invitations` and `mail` modules.
+    Owner-only list, invite, resend, and revoke under
+    `/api/workspaces/{id}/invitations`; `GET /api/invitation` and
+    `POST /api/invitation/accept` for the invitee, authorized by the
+    `X-Invitation-Token` header and a verified email equal to the
+    invited address. The `send-invitation-email` job (outbox,
+    idempotent, bounded retries) generates the token just before
+    sending, so only its hash is stored. Mail providers: `file`
+    (local `.eml` files), `ses` (SES v2, task role), `disabled`. Audit
+    actions `INVITATION_CREATED`, `_RESENT`, `_REVOKED`, `_ACCEPTED`.
+    `galleries.ShareTokens` moved to `shared.SecretTokens` for reuse.
+    New dependency: `software.amazon.awssdk:sesv2` (from the existing
+    SDK BOM).
+-   **Frontend:** an **Invitations** panel on **Members** for owners
+    (invite by email, sending/sent/failed status, expiry, **Resend**,
+    **Revoke**); the `#/invite/<token>` page (accept, wrong-account
+    with **Sign out**, expired, withdrawn, used, broken link); the
+    token is kept in session storage across the Google sign-in round
+    trip and forgotten afterwards. Activity labels for the new actions.
+-   **Infra:** optional `-c mailFrom=<address>` creates the SES email
+    identity, grants only the worker `ses:SendEmail` on it, and sets
+    `MAIL_PROVIDER=ses` and `MAIL_FROM`; both services get `APP_URL`.
+    The Deploy workflow passes the optional `MAIL_FROM` environment
+    variable.
+-   **Verified locally on 2026-10-17:**
+    -   `cd backend && ./mvnw verify`: 78 unit tests and 139
+        integration tests passed.
+        -   `InvitationsIT` (8): invite, email with link, accept, member
+            list, repeat accept, used link refused to others, audit
+            trail; only the invited, verified address can accept;
+            revoked and expired links refused, expired listed and
+            resendable; resend cooldown, new link, old link 404;
+            permanent failure stops at once, temporary failures retry
+            then fail, token hash cleared; validation, duplicate (other
+            case), limit of 20; malformed, unknown, missing token 404,
+            signed out 401; plain members get 403, other workspaces 404
+            on every route, including with their own workspace path.
+        -   `FileEmailSenderTest` (2): `.eml` output with an encoded
+            subject; no header injection; `toString` hides recipient
+            and body. `SecretTokensTest` moved from galleries.
+        -   `ApiRouteAuthorizationIT` allow-lists `/api/invitation` and
+            `/api/invitation/accept`; `BackendApplicationIT` expects
+            V10.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 100 tests passed (6 in `Invitations.test.tsx`,
+        2 new in `routing.test.ts`), lint clean, build succeeded.
+    -   `cd infra && npm run typecheck && npm test`: 39 tests passed (3
+        new: `APP_URL`, email off without a sender, worker-only
+        `ses:SendEmail` on the sender identity). `npx cdk synth -q -c
+        env=staging` with and without `-c mailFrom=…` succeeds.
+    -   The local backend started with V10 applied.
+-   **Not verified:** a browser run of the new pages; sending through
+    real SES.
+-   **Known gaps:**
+    -   No member removal or role changes, so a mistaken acceptance
+        needs a database change.
+    -   If the worker dies after SES accepted an email but before
+        recording it, a second email goes out and only its link works.
+    -   SES starts in the sandbox (verified recipients only) until
+        production access is granted.

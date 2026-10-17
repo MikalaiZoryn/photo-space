@@ -12,5 +12,7 @@ public enum AuditTarget {
     /** A workspace's branding; the target ID is the workspace's. */
     BRANDING,
     INQUIRY_FORM,
-    INQUIRY
+    INQUIRY,
+    /** An invitation to join the workspace by email. */
+    INVITATION
 }

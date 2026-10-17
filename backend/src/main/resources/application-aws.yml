@@ -8,6 +8,10 @@ app:
     endpoint: ""
   jobs:
     sqs-endpoint: ""
+  # The file system is read-only, so the local file mailbox cannot work here. Without a configured SES sender,
+  # invitation emails fail visibly instead.
+  mail:
+    provider: ${MAIL_PROVIDER:disabled}
 
 server:
   tomcat:

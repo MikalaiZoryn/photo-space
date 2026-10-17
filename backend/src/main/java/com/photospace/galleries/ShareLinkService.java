@@ -4,6 +4,7 @@ import com.photospace.audit.AuditAction;
 import com.photospace.audit.AuditService;
 import com.photospace.audit.AuditTarget;
 import com.photospace.galleries.GalleryService.GalleryRow;
+import com.photospace.shared.SecretTokens;
 import com.photospace.shared.paging.PageQuery;
 import com.photospace.shared.paging.PageView;
 import com.photospace.shared.web.InvalidFieldsException;
@@ -58,7 +59,7 @@ class ShareLinkService {
         if (validDays < 1 || validDays > properties.maxLinkDays()) {
             throw InvalidFieldsException.of("validDays", "must be between 1 and " + properties.maxLinkDays());
         }
-        String token = ShareTokens.generate();
+        String token = SecretTokens.generate();
         UUID id = jdbc.sql("""
                         INSERT INTO gallery_share_links (workspace_id, gallery_id, token_hash, expires_at, created_by)
                         VALUES (:workspaceId, :galleryId, :tokenHash, now() + make_interval(hours => 24 * :validDays), :userId)
@@ -66,7 +67,7 @@ class ShareLinkService {
                         """)
                 .param("workspaceId", workspace.workspaceId())
                 .param("galleryId", galleryId)
-                .param("tokenHash", ShareTokens.hash(token))
+                .param("tokenHash", SecretTokens.hash(token))
                 .param("validDays", validDays)
                 .param("userId", workspace.userId())
                 .query(UUID.class)

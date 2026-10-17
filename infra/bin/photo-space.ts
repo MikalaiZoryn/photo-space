@@ -36,6 +36,8 @@ new PhotoSpaceStack(app, `PhotoSpace-${config.name}`, {
   webAclArn: edge.webAcl.attrArn,
   backendImage: ecs.ContainerImage.fromAsset(backend, { platform: Platform.LINUX_AMD64 }),
   frontendAssets: s3deploy.Source.asset(frontendDist),
+  // Optional: -c mailFrom=studio@example.com sends invitation emails through SES (docs/operations.md).
+  mailFrom: app.node.tryGetContext('mailFrom'),
   tags,
 })
 

@@ -3,6 +3,7 @@ package com.photospace.galleries;
 import com.photospace.assets.AssetService;
 import com.photospace.assets.PhotoFile;
 import com.photospace.galleries.GalleryService.GalleryRow;
+import com.photospace.shared.SecretTokens;
 import com.photospace.shared.web.ForbiddenException;
 import com.photospace.shared.web.NotFoundException;
 import com.photospace.workspaces.WorkspaceService;
@@ -85,7 +86,7 @@ class PublicGalleryService {
     }
 
     private Optional<Access> resolve(String token) {
-        if (!ShareTokens.isWellFormed(token)) {
+        if (!SecretTokens.isWellFormed(token)) {
             return Optional.empty();
         }
         Optional<LinkRow> link = jdbc.sql("""
@@ -93,7 +94,7 @@ class PublicGalleryService {
                           FROM gallery_share_links l
                          WHERE l.token_hash = :tokenHash AND l.revoked_at IS NULL AND l.expires_at > now()
                         """)
-                .param("tokenHash", ShareTokens.hash(token))
+                .param("tokenHash", SecretTokens.hash(token))
                 .query((rs, i) -> new LinkRow(
                         rs.getObject("id", UUID.class),
                         rs.getObject("workspace_id", UUID.class),

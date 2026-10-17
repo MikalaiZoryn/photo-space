@@ -129,6 +129,25 @@ public class WorkspaceService {
         return get(workspace);
     }
 
+    /**
+     * Adds the user to the workspace with {@code role}, unless they already belong to it, and returns the workspace
+     * as they now see it (with their actual role). For callers that authorized the user some other way than
+     * membership, such as an accepted invitation.
+     */
+    @Transactional
+    public WorkspaceView join(UUID workspaceId, UUID userId, WorkspaceRole role) {
+        jdbc.sql("""
+                        INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (:workspaceId, :userId, :role)
+                        ON CONFLICT (workspace_id, user_id) DO NOTHING
+                        """)
+                .param("workspaceId", workspaceId)
+                .param("userId", userId)
+                .param("role", role.name())
+                .update();
+        WorkspaceRole actual = findRole(workspaceId, userId).orElseThrow(NotFoundException::new);
+        return get(new WorkspaceContext(workspaceId, userId, actual));
+    }
+
     @Transactional(readOnly = true)
     public List<MemberView> listMembers(WorkspaceContext workspace) {
         return jdbc.sql("""

@@ -27,6 +27,8 @@ class ApiRouteAuthorizationIT {
             "/api/auth/csrf", // public
             "/api/me", // the signed-in user
             "/api/workspaces", // the signed-in user's memberships
+            "/api/invitation", // the signed-in user, authorized by an invitation token
+            "/api/invitation/accept", // the same
             "/api/public/gallery", // a gallery visitor, authorized by a share link token
             "/api/public/gallery/photos/{assetId}/download", // the same
             "/api/public/inquiry/{slug}", // an inquiry form visitor; only a published form, chosen by its slug

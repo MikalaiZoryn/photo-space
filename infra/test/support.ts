@@ -15,7 +15,7 @@ const { context } = JSON.parse(readFileSync(new URL('../cdk.json', import.meta.u
 export const ACCOUNT = '123456789012'
 
 /** Both stacks of one environment, built like bin/photo-space.ts but without Docker or a frontend build. */
-export function synthesize(environment = 'staging') {
+export function synthesize(environment = 'staging', mailFrom?: string) {
   const app = new App({ context })
   const config = environmentConfig(environment)
   const edge = new EdgeStack(app, 'Edge', {
@@ -30,6 +30,7 @@ export function synthesize(environment = 'staging') {
     webAclArn: edge.webAcl.attrArn,
     backendImage: ecs.ContainerImage.fromRegistry('photo-space-backend:test'),
     frontendAssets: s3deploy.Source.data('index.html', '<!doctype html>'),
+    mailFrom,
   })
   return { config, edge: Template.fromStack(edge), app: Template.fromStack(stack) }
 }
