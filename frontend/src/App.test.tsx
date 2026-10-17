@@ -99,7 +99,8 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Alice Studio' })).toBeTruthy()
     expect(await screen.findByText(/No sessions yet/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('link', { name: 'Members' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Settings' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Members' }))
     const memberList = await screen.findByRole('list', { name: 'Members' })
     expect(within(memberList).getByText('alice@example.com')).toBeTruthy()
     expect(within(memberList).getByText('Owner')).toBeTruthy()

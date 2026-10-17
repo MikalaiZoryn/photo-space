@@ -83,6 +83,7 @@ export function FormBuilderPage({ workspaceId }: Props) {
         </>
       }
       actions={actions}
+      back={{ href: paths.settings(), label: 'Settings' }}
     />
   )
 

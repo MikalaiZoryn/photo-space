@@ -298,12 +298,8 @@ describe('Content studio', () => {
     expect((within(form).getByLabelText('Caption') as HTMLTextAreaElement).value).toBe('Original')
   })
 
-  it('lists batches and saves the brand profile with its version', async () => {
-    const fetch = renderWorkspace('#/content', {
-      [`GET ${CONTENT}/brand-profile`]: () =>
-        json({ voice: 'Warm', audience: null, preferences: null, avoid: null, version: 1, updatedAt: '2026-10-16T09:00:00Z' }),
-      [`PUT ${CONTENT}/brand-profile`]: () =>
-        json({ voice: 'Warm', audience: null, preferences: null, avoid: 'Clichés', version: 2, updatedAt: '2026-10-16T10:00:00Z' }),
+  it('lists batches and links to the brand profile in Content Studio', async () => {
+    renderWorkspace('#/content', {
       [`GET ${CONTENT}/batches`]: () => page([batch({ approvedCount: 1 })]),
     })
 
@@ -311,6 +307,21 @@ describe('Content studio', () => {
     expect(within(list).getByRole('link', { name: 'Family session' }).getAttribute('href')).toBe('#/content/batches/b-1')
     expect(within(list).getByText(/2 drafts, 1 approved/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Content' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Content Studio' }).getAttribute('href')).toBe('#/settings/content-studio')
+    expect(screen.queryByRole('form', { name: 'Brand profile' })).toBeNull()
+  })
+
+  it('saves the brand profile with its version in Content Studio', async () => {
+    const fetch = renderWorkspace('#/settings/content-studio', {
+      [`GET ${CONTENT}/brand-profile`]: () =>
+        json({ voice: 'Warm', audience: null, preferences: null, avoid: null, version: 1, updatedAt: '2026-10-16T09:00:00Z' }),
+      [`PUT ${CONTENT}/brand-profile`]: () =>
+        json({ voice: 'Warm', audience: null, preferences: null, avoid: 'Clichés', version: 2, updatedAt: '2026-10-16T10:00:00Z' }),
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Content Studio' })).toBeTruthy()
+    const nav = screen.getByRole('navigation', { name: 'Workspace sections' })
+    expect(within(nav).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')).toBe('page')
 
     const form = await screen.findByRole('form', { name: 'Brand profile' })
     expect((within(form).getByLabelText('Voice') as HTMLTextAreaElement).value).toBe('Warm')

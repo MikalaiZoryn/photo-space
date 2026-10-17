@@ -24,6 +24,8 @@ describe('parseRoute', () => {
     expect(parseRoute('#/inquiries/i-1')).toEqual({ page: 'inquiry', id: 'i-1' })
     expect(parseRoute('#/inquiry-form')).toEqual({ page: 'inquiryForm' })
     expect(parseRoute('#/branding')).toEqual({ page: 'branding' })
+    expect(parseRoute('#/settings')).toEqual({ page: 'settings' })
+    expect(parseRoute('#/settings/content-studio')).toEqual({ page: 'contentStudio' })
   })
 
   it('falls back to sessions for unknown hashes', () => {

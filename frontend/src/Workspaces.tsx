@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CalendarDays, ClipboardList, History, Images, Inbox, ListChecks, Plus, Sparkles, UserCog, Users, Workflow } from 'lucide-react'
+import { CalendarDays, History, Images, Inbox, ListChecks, Plus, Settings, Sparkles, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { ActivityPage } from './activity/ActivityPage.tsx'
@@ -23,6 +23,8 @@ import { navigate, paths, useRoute, type Route } from './routing.ts'
 import { readSelected, writeSelected } from './selectedWorkspace.ts'
 import { EditSession, NewSession, SessionDetail } from './sessions/SessionDetail.tsx'
 import { SessionsPage } from './sessions/SessionsPage.tsx'
+import { ContentStudioPage } from './settings/ContentStudioPage.tsx'
+import { SettingsPage } from './settings/SettingsPage.tsx'
 import { EditTask, NewTask, TasksPage } from './tasks/TasksPage.tsx'
 import { ErrorAlert, Loading } from './ui/Feedback.tsx'
 import { LoadError } from './ui/LoadError.tsx'
@@ -181,35 +183,19 @@ function WorkspaceHome({
   render: (nav: NavItem[], children: ReactNode) => ReactNode
 }) {
   const route = useRoute()
-  const section = route.page.startsWith('client')
-    ? 'clients'
-    : route.page === 'inquiries' || route.page === 'inquiry'
-      ? 'inquiries'
-      : route.page === 'inquiryForm' || route.page === 'branding'
-        ? 'inquiryForm'
-        : route.page.startsWith('galler')
-      ? 'galleries'
-      : route.page.startsWith('content')
-        ? 'content'
-        : route.page.startsWith('task')
-          ? 'tasks'
-          : route.page === 'automation' || route.page === 'activity' || route.page === 'members'
-            ? route.page
-            : 'sessions'
+  const section = sectionOf(route)
   const nav: NavItem[] = [
     { href: paths.sessions(), label: 'Sessions', icon: CalendarDays, current: section === 'sessions' },
     { href: paths.tasks(), label: 'Tasks', icon: ListChecks, current: section === 'tasks' },
     { href: paths.clients(), label: 'Clients', icon: Users, current: section === 'clients' },
     { href: paths.inquiries(), label: 'Inquiries', icon: Inbox, current: section === 'inquiries' },
-    { href: paths.inquiryForm(), label: 'Inquiry form', icon: ClipboardList, current: section === 'inquiryForm' },
     { href: paths.galleries(), label: 'Galleries', icon: Images, current: section === 'galleries' },
     { href: paths.content(), label: 'Content', icon: Sparkles, current: section === 'content' },
-    { href: paths.automation(), label: 'Automation', icon: Workflow, current: section === 'automation' },
     // The audit log is for owners; the server refuses it to members anyway.
     ...(workspace.role === 'OWNER'
       ? [{ href: paths.activity(), label: 'Activity', icon: History, current: section === 'activity' }]
       : []),
-    { href: paths.members(), label: 'Members', icon: UserCog, current: section === 'members' },
+    { href: paths.settings(), label: 'Settings', icon: Settings, current: section === 'settings' },
   ]
 
   return render(
@@ -221,6 +207,41 @@ function WorkspaceHome({
       <RoutedPage workspace={workspace} route={route} />
     </section>,
   )
+}
+
+/** The nav item a page belongs to. The pages listed on the Settings page highlight Settings. */
+function sectionOf(route: Route) {
+  switch (route.page) {
+    case 'clients':
+    case 'client':
+    case 'clientNew':
+    case 'clientEdit':
+      return 'clients'
+    case 'inquiries':
+    case 'inquiry':
+      return 'inquiries'
+    case 'galleries':
+    case 'gallery':
+      return 'galleries'
+    case 'content':
+    case 'contentBatch':
+      return 'content'
+    case 'tasks':
+    case 'taskNew':
+    case 'taskEdit':
+      return 'tasks'
+    case 'activity':
+      return 'activity'
+    case 'settings':
+    case 'contentStudio':
+    case 'automation':
+    case 'members':
+    case 'inquiryForm':
+    case 'branding':
+      return 'settings'
+    default:
+      return 'sessions'
+  }
 }
 
 function RoutedPage({ workspace, route }: { workspace: Workspace; route: Route }) {
@@ -270,6 +291,10 @@ function RoutedPage({ workspace, route }: { workspace: Workspace; route: Route }
       return <FormBuilderPage workspaceId={workspaceId} />
     case 'branding':
       return <BrandingPage workspaceId={workspaceId} />
+    case 'settings':
+      return <SettingsPage />
+    case 'contentStudio':
+      return <ContentStudioPage workspaceId={workspaceId} />
   }
 }
 
@@ -282,6 +307,7 @@ function MembersPage({ workspace }: { workspace: Workspace }) {
         id="members-heading"
         title="Members"
         description={`Time zone ${workspace.timezone} · Your role: ${workspace.role.toLowerCase()}`}
+        back={{ href: paths.settings(), label: 'Settings' }}
       />
       {members.state.kind === 'loading' && <Loading>Loading members…</Loading>}
       {members.state.kind === 'error' && (

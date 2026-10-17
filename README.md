@@ -229,7 +229,7 @@ With the stack running, dev sign-in, and a session with a few ready photos:
 
 With the stack running, dev sign-in, and a session with a few ready photos (the default mock provider needs no account):
 
-1. Open **Content**, fill in the brand profile (for example, voice "warm and calm"), and **Save profile**.
+1. Open **Settings** › **Content Studio**, fill in the brand profile (for example, voice "warm and calm"), and **Save profile**.
 2. On the session page, under **Instagram drafts**, choose **Create drafts**. Pick two photos (the numbers show the order), edit the notes, choose 3 caption options, and **Write drafts**.
 3. The batch page shows "Writing drafts…" and, a few seconds later, three drafts, the suggested carousel order, and Story ideas.
 4. Edit a draft and add "@someone" to it, then **Save changes**: it shows "Version 2 · edited" and a review hint about "@someone". **Approve** it; **Copy for Instagram** appears. Edit it again, and it needs a new approval. **History** lists every version.
@@ -241,7 +241,7 @@ With the stack running, dev sign-in, and a session with a few ready photos (the 
 
 With the stack running and dev sign-in:
 
-1. Open **Automation** and **Add rule**: when a session is marked **Booked**, create "Send the contract", due after 2 days.
+1. Open **Settings** › **Automation** and **Add rule**: when a session is marked **Booked**, create "Send the contract", due after 2 days.
 2. Create a session with a start time and **Mark booked**. A few seconds later, the session's **Tasks** panel shows "Send the contract", due two days from today, marked **Automated**. **Automation → Recent runs** shows "Task created".
 3. Cancel the session, reopen it as an inquiry, and book it again. No second task appears: the rule fires once per session.
 4. Tick the task's checkbox to complete it. On **Tasks**, switch **Show** to **Done** to find it again. **New task** creates a manual task with a due date and assignee.
@@ -254,7 +254,7 @@ To see a failed run, block task inserts for a moment: `docker compose exec postg
 
 With the stack running and dev sign-in:
 
-1. Open **Inquiry form** and **Start from the default template**. Follow the **branding** link, set a business name, colors, a font, and upload a PNG logo; **Save branding** once the logo is ready.
+1. Open **Settings** › **Inquiry form** and **Start from the default template**. Follow the **branding** link, set a business name, colors, a font, and upload a PNG logo; **Save branding** once the logo is ready.
 2. Back on **Inquiry form**, add a question, move it up, and watch the preview follow. **Publish**. Copy the hosted URL and open it in a private window: the branded form shows without sign-in.
 3. Change the title and **Save draft**. Reloading the private window still shows the old title until you **Publish changes**.
 4. In the private window, send the form with an email that one of your clients has. Within a few seconds **Inquiries** lists it as **Possible match**, and **Tasks** has "Review inquiry from …". Send another with a new email: it is **New**.
@@ -266,7 +266,7 @@ With the stack running and dev sign-in:
 
 Locally, emails are not sent: each one is written to `backend/target/dev-mail/<time>-<id>.eml` (the backend logs the path). Any mail program opens these files, or read the link with `grep -h invite backend/target/dev-mail/*.eml`. With dev sign-in:
 
-1. Sign in as `owner@example.com`, open **Members**, and invite `carol@example.com`. The row shows "Sending…", then "Email sent".
+1. Sign in as `owner@example.com`, open **Settings** › **Members**, and invite `carol@example.com`. The row shows "Sending…", then "Email sent".
 2. Open the link from the newest `.eml` file in a private window. Sign in there as `eve@example.com`: the page says the invitation is for another address and offers **Sign out**. Sign out and sign in as `carol@example.com`: the page shows **Accept invitation**.
 3. **Accept invitation**. Carol lands in the owner's workspace as a member, and the owner's **Members** list shows her. Opening the link again says it was already used.
 4. Invite another address, **Revoke** it, and open its link: "This invitation was withdrawn". **Resend** right after inviting is refused for a minute; a resent email's link works, and the previous one shows "does not work".
