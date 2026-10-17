@@ -15,6 +15,8 @@ export type Route =
   | { page: 'clientEdit'; id: string }
   | { page: 'galleries' }
   | { page: 'gallery'; id: string }
+  | { page: 'content' }
+  | { page: 'contentBatch'; id: string }
   | { page: 'members' }
 
 export function parseRoute(hash: string): Route {
@@ -35,6 +37,10 @@ export function parseRoute(hash: string): Route {
     if (id) return { page: 'gallery', id }
     return { page: 'galleries' }
   }
+  if (section === 'content') {
+    if (id === 'batches' && action) return { page: 'contentBatch', id: action }
+    return { page: 'content' }
+  }
   if (section === 'members') return { page: 'members' }
   return { page: 'sessions' }
 }
@@ -50,6 +56,8 @@ export const paths = {
   clientEdit: (id: string) => `#/clients/${encodeURIComponent(id)}/edit`,
   galleries: () => '#/galleries',
   gallery: (id: string) => `#/galleries/${encodeURIComponent(id)}`,
+  content: () => '#/content',
+  contentBatch: (id: string) => `#/content/batches/${encodeURIComponent(id)}`,
   members: () => '#/members',
 }
 

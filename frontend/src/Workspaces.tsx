@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CalendarDays, Images, Plus, UserCog, Users } from 'lucide-react'
+import { CalendarDays, Images, Plus, Sparkles, UserCog, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { ClientDetail, EditClient, NewClient } from './clients/ClientDetail.tsx'
 import { ClientsPage } from './clients/ClientsPage.tsx'
+import { BatchPage } from './content/BatchPage.tsx'
+import { ContentPage } from './content/ContentPage.tsx'
 import { CreateWorkspaceForm } from './CreateWorkspaceForm.tsx'
 import { GalleriesPage } from './galleries/GalleriesPage.tsx'
 import { GalleryPage } from './galleries/GalleryPage.tsx'
@@ -177,13 +179,16 @@ function WorkspaceHome({
     ? 'clients'
     : route.page.startsWith('galler')
       ? 'galleries'
-      : route.page === 'members'
+      : route.page.startsWith('content')
+        ? 'content'
+        : route.page === 'members'
         ? 'members'
         : 'sessions'
   const nav: NavItem[] = [
     { href: paths.sessions(), label: 'Sessions', icon: CalendarDays, current: section === 'sessions' },
     { href: paths.clients(), label: 'Clients', icon: Users, current: section === 'clients' },
     { href: paths.galleries(), label: 'Galleries', icon: Images, current: section === 'galleries' },
+    { href: paths.content(), label: 'Content', icon: Sparkles, current: section === 'content' },
     { href: paths.members(), label: 'Members', icon: UserCog, current: section === 'members' },
   ]
 
@@ -221,6 +226,10 @@ function RoutedPage({ workspace, route }: { workspace: Workspace; route: Route }
       return <GalleriesPage workspaceId={workspaceId} timezone={timezone} />
     case 'gallery':
       return <GalleryPage key={route.id} workspaceId={workspaceId} galleryId={route.id} timezone={timezone} />
+    case 'content':
+      return <ContentPage workspaceId={workspaceId} timezone={timezone} />
+    case 'contentBatch':
+      return <BatchPage key={route.id} workspaceId={workspaceId} batchId={route.id} timezone={timezone} />
     case 'members':
       return <MembersPage workspace={workspace} />
   }

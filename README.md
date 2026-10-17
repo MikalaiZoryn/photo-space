@@ -109,6 +109,14 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `POST /api/workspaces/{id}/galleries/{galleryId}/archive`, `…/restore` | Members. Idempotent. |
 | `GET`, `POST /api/workspaces/{id}/galleries/{galleryId}/links` | Members. `POST {validDays}` (1–365) returns `{link, token}`; the token is shown only this once. |
 | `POST /api/workspaces/{id}/galleries/{galleryId}/links/{linkId}/revoke` | Members. Idempotent. |
+| `GET /api/workspaces/{id}/content/settings` | Members. The AI provider (`mock` or `anthropic`), model, and limits. |
+| `GET`, `PUT /api/workspaces/{id}/content/brand-profile` | Members. `PUT` takes `{version, profile: {voice, audience, preferences, avoid}}`; version 0 before the first save. |
+| `GET /api/workspaces/{id}/content/batches?sessionId=&page=0&size=25` | Members. Generation batches, newest first, with photo, draft, and approval counts. |
+| `POST /api/workspaces/{id}/content/batches` | Members. `{sessionId, assetIds, notes, captionCount, includeHashtags, includeCallToAction}`. Returns the `PENDING` batch; a job writes the drafts. |
+| `GET /api/workspaces/{id}/content/batches/{batchId}` | Members. `{batch, photos, carousel, drafts}`. Poll it while `PENDING`. |
+| `POST /api/workspaces/{id}/content/batches/{batchId}/retry`, `…/regenerate` | Members. Retry runs a `FAILED` batch again; regenerate creates a new batch from the same input (201). |
+| `GET`, `PUT /api/workspaces/{id}/content/drafts/{draftId}` | Members. `GET` returns `{draft, versions}`. `PUT {version, draft: {caption, callToAction, hashtags}}` saves a new version. |
+| `POST /api/workspaces/{id}/content/drafts/{draftId}/status` | Members. `{version, status: "APPROVED" \| "DRAFT"}`; approves exactly that version. |
 | `GET /api/public/gallery` | Gallery visitors, with the `X-Gallery-Token` header. The gallery the link opens. |
 | `POST /api/public/gallery/photos/{assetId}/download` | Gallery visitors, with the token header and CSRF. Returns `{url, expiresAt}` when the gallery allows downloads. |
 
@@ -137,6 +145,13 @@ Galleries and share links (D14):
 - Clients open `/#/g/<token>`. The token stays in the URL fragment and reaches the API only in the `X-Gallery-Token` header. Every link that doesn't work gets the same 404.
 - Visitor image URLs expire after 10 minutes and download URLs after 5. Views and downloads are counted per link, with no visitor data.
 - Removing a photo from a gallery, or archiving a gallery, never deletes the photo. See ARCHITECTURE §8 for retention and deletion.
+
+AI content drafts (D16):
+
+- `CONTENT_PROVIDER` is `mock` by default: sample captions written on the server, with no network calls and no account. Set `CONTENT_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` to use Claude (`ANTHROPIC_MODEL`, default `claude-opus-5-5`). The backend refuses to start with `anthropic` and no key.
+- A batch takes 1–10 ready photos of one session and asks for 1–5 caption options. Only the selected photos' 2048 px previews (no EXIF), the notes in the request, the session type, and the brand profile are sent. Client names and contact details never are.
+- Batch status: `PENDING` (queued, generating, or waiting for an automatic retry, with `failureReason` saying why) → `SUCCEEDED` or `FAILED`. Rate limits, timeouts, and unusable answers are retried up to 5 times with backoff; refusals, rejected requests, and setup problems fail at once. `…/retry` starts a failed batch again.
+- Drafts are proposals. Each edit is a new version; approval names the version, and editing makes the draft a draft again. Each draft lists `checks`: handles, links, emails, phone numbers, and prices that are not in your notes or brand profile. Nothing is ever posted: copy an approved draft into Instagram yourself.
 
 ### Clients and sessions: a quick manual check
 
@@ -169,6 +184,18 @@ With the stack running, dev sign-in, and a session with a few ready photos:
 4. Open the URL in a private window. The gallery shows without sign-in, in your order, and **Download original** saves the file under its uploaded name.
 5. Back in the first window, **Unpublish**. Reloading the private window shows "This gallery link does not work". **Publish** again, and it works again. **Revoke** the link, and it stops for good. The link list shows its views and downloads.
 6. In another user's window, the gallery URL shows "not found".
+
+### AI content: a quick manual check
+
+With the stack running, dev sign-in, and a session with a few ready photos (the default mock provider needs no account):
+
+1. Open **Content**, fill in the brand profile (for example, voice "warm and calm"), and **Save profile**.
+2. On the session page, under **Instagram drafts**, choose **Create drafts**. Pick two photos (the numbers show the order), edit the notes, choose 3 caption options, and **Write drafts**.
+3. The batch page shows "Writing drafts…" and, a few seconds later, three drafts, the suggested carousel order, and Story ideas.
+4. Edit a draft and add "@someone" to it, then **Save changes**: it shows "Version 2 · edited" and a review hint about "@someone". **Approve** it; **Copy for Instagram** appears. Edit it again, and it needs a new approval. **History** lists every version.
+5. Reload the page: the drafts and approvals are still there. **Regenerate** creates a new batch from the same photos and notes.
+6. To see a failure, restart the backend with `CONTENT_PROVIDER=anthropic ANTHROPIC_API_KEY=invalid`. A new batch fails with "AI generation is not set up correctly…". Restart without them, and **Retry** produces drafts.
+7. In another user's window, the batch URL shows "not found".
 
 ### Health endpoints
 

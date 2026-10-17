@@ -18,6 +18,7 @@
         <java.version>25</java.version>
         <aws-sdk.version>2.55.10</aws-sdk.version>
         <metadata-extractor.version>2.19.0</metadata-extractor.version>
+        <anthropic-java.version>2.65.0</anthropic-java.version>
     </properties>
 
     <dependencyManagement>
@@ -101,6 +102,12 @@
             <groupId>com.drewnoakes</groupId>
             <artifactId>metadata-extractor</artifactId>
             <version>${metadata-extractor.version}</version>
+        </dependency>
+        <!-- The Claude API for AI content drafts (D16). Only the content.anthropic adapter uses it. -->
+        <dependency>
+            <groupId>com.anthropic</groupId>
+            <artifactId>anthropic-java</artifactId>
+            <version>${anthropic-java.version}</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>

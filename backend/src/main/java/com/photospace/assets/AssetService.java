@@ -11,7 +11,10 @@ import com.photospace.shared.web.NotFoundException;
 import com.photospace.storage.ObjectStorage;
 import com.photospace.storage.ObjectStorage.PresignedUpload;
 import com.photospace.workspaces.WorkspaceContext;
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -218,6 +221,27 @@ public class AssetService {
                     case PREVIEW -> storage.presignAttachment(
                             asset.previewKey(), FileNames.previewOf(asset.originalFilename()), "image/jpeg", validFor);
                 });
+    }
+
+    // --- Used by AI content generation, a background job that authorizes access when the batch is created. ---
+
+    /**
+     * The 2048 px preview JPEG (re-encoded without metadata, D11) of a {@code READY} photo of this session. Empty
+     * if the photo is not {@code READY}, not of this session, or not in this workspace.
+     */
+    public Optional<byte[]> readPreview(UUID workspaceId, UUID sessionId, UUID assetId) throws IOException {
+        Optional<AssetRow> asset = find(workspaceId, assetId, false)
+                .filter(row -> row.status() == AssetStatus.READY && sessionId.equals(row.sessionId()));
+        if (asset.isEmpty()) {
+            return Optional.empty();
+        }
+        Path file = Files.createTempFile("preview-", ".jpg");
+        try {
+            storage.download(asset.get().previewKey(), file);
+            return Optional.of(Files.readAllBytes(file));
+        } finally {
+            Files.deleteIfExists(file);
+        }
     }
 
     // --- Used by processing and cleanup, which run without a signed-in user. ---

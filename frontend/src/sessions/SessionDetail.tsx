@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { getClient, summaryOf } from '../api/clients.ts'
+import { SessionContent } from '../content/SessionContent.tsx'
 import { SessionGalleries } from '../galleries/SessionGalleries.tsx'
 import {
   changeSessionStatus,
@@ -210,6 +211,13 @@ function SessionView({
         <SessionGalleries
           workspaceId={workspaceId}
           sessionId={session.id}
+          timezone={session.timezone}
+          archived={archived}
+        />
+        <SessionContent
+          workspaceId={workspaceId}
+          sessionId={session.id}
+          sessionNotes={session.notes}
           timezone={session.timezone}
           archived={archived}
         />

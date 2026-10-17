@@ -65,6 +65,21 @@ app:
     max-photos: 500
     max-link-days: 365
     download-url-validity: 5m
+  # AI content drafts (D16). The default mock provider needs no account and sends nothing off the machine. With
+  # CONTENT_PROVIDER=anthropic, selected photo previews, the notes, and the brand profile go to the Claude API.
+  content:
+    provider: ${CONTENT_PROVIDER:mock}
+    max-photos: 10
+    mock-delay: 2s
+    anthropic:
+      # Required with the anthropic provider. Never commit it; see .env.example.
+      api-key: ${ANTHROPIC_API_KEY:}
+      model: ${ANTHROPIC_MODEL:claude-opus-5-5}
+      effort: medium
+      timeout: 120s
+      max-tokens: 16000
+      # The SDK's own quick retries; the job's backoff handles longer outages (D12).
+      max-retries: 1
 
 management:
   endpoints:
