@@ -2,8 +2,11 @@
 @import "tw-animate-css";
 @import "@fontsource-variable/inter";
 
-/* Dark mode follows the operating system; there is no in-app toggle. */
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/*
+ * Dark mode keys on <html data-theme="dark">. public/theme.js sets it before first paint from the saved choice or
+ * the OS setting, and src/theme.ts keeps it current when the user switches theme.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* Radix open/closed states, used by the shadcn components' animations (from shadcn/tailwind.css). */
 @custom-variant data-open {
@@ -70,51 +73,49 @@
   --sidebar-ring: #5b4ae0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+:root[data-theme="dark"] {
+  color-scheme: dark;
 
-    --background: #111116;
-    --foreground: #ececf1;
-    --card: #1a1a21;
-    --card-foreground: #ececf1;
-    --popover: #1f1f27;
-    --popover-foreground: #ececf1;
-    --primary: #ececf1;
-    --primary-foreground: #16161c;
-    --secondary: #26262f;
-    --secondary-foreground: #ececf1;
-    --muted: #26262f;
-    --muted-foreground: #a0a0ad;
-    --accent: #2a2547;
-    --accent-foreground: #c8c0ff;
-    --brand: #8b7dff;
-    --brand-foreground: #111116;
-    --destructive: #ff6b78;
-    --border: #2c2c36;
-    --input: #3a3a46;
-    --ring: #8b7dff;
+  --background: #111116;
+  --foreground: #ececf1;
+  --card: #1a1a21;
+  --card-foreground: #ececf1;
+  --popover: #1f1f27;
+  --popover-foreground: #ececf1;
+  --primary: #ececf1;
+  --primary-foreground: #16161c;
+  --secondary: #26262f;
+  --secondary-foreground: #ececf1;
+  --muted: #26262f;
+  --muted-foreground: #a0a0ad;
+  --accent: #2a2547;
+  --accent-foreground: #c8c0ff;
+  --brand: #8b7dff;
+  --brand-foreground: #111116;
+  --destructive: #ff6b78;
+  --border: #2c2c36;
+  --input: #3a3a46;
+  --ring: #8b7dff;
 
-    --tone-info: #8db4ff;
-    --tone-info-bg: #1c2a47;
-    --tone-success: #6fd3a0;
-    --tone-success-bg: #163326;
-    --tone-warning: #f2c46b;
-    --tone-warning-bg: #3a2e14;
-    --tone-danger: #ff8a95;
-    --tone-danger-bg: #3d1a20;
-    --tone-neutral: #b4b4c0;
-    --tone-neutral-bg: #2a2a33;
+  --tone-info: #8db4ff;
+  --tone-info-bg: #1c2a47;
+  --tone-success: #6fd3a0;
+  --tone-success-bg: #163326;
+  --tone-warning: #f2c46b;
+  --tone-warning-bg: #3a2e14;
+  --tone-danger: #ff8a95;
+  --tone-danger-bg: #3d1a20;
+  --tone-neutral: #b4b4c0;
+  --tone-neutral-bg: #2a2a33;
 
-    --sidebar: #16161c;
-    --sidebar-foreground: #ececf1;
-    --sidebar-primary: #8b7dff;
-    --sidebar-primary-foreground: #111116;
-    --sidebar-accent: #2a2547;
-    --sidebar-accent-foreground: #c8c0ff;
-    --sidebar-border: #2c2c36;
-    --sidebar-ring: #8b7dff;
-  }
+  --sidebar: #16161c;
+  --sidebar-foreground: #ececf1;
+  --sidebar-primary: #8b7dff;
+  --sidebar-primary-foreground: #111116;
+  --sidebar-accent: #2a2547;
+  --sidebar-accent-foreground: #c8c0ff;
+  --sidebar-border: #2c2c36;
+  --sidebar-ring: #8b7dff;
 }
 
 @theme inline {
