@@ -1,8 +1,16 @@
 import { useState } from 'react'
+import { Plus, Search } from 'lucide-react'
 import { listClients } from '../api/clients.ts'
 import { paths } from '../routing.ts'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { EmptyState, Loading } from '../ui/Feedback.tsx'
+import { CheckboxField } from '../ui/Field.tsx'
 import { LoadError } from '../ui/LoadError.tsx'
+import { PageHeader } from '../ui/PageHeader.tsx'
 import { Pager } from '../ui/Pager.tsx'
+import { FilterBar, Initials, RecordList, RecordRow } from '../ui/RecordList.tsx'
+import { StatusBadge } from '../ui/StatusBadge.tsx'
 import { useLoad } from '../useLoad.ts'
 
 export function ClientsPage({ workspaceId }: { workspaceId: string }) {
@@ -17,17 +25,26 @@ export function ClientsPage({ workspaceId }: { workspaceId: string }) {
 
   return (
     <section aria-labelledby="clients-heading">
-      <div className="toolbar">
-        <h3 id="clients-heading">Clients</h3>
-        <a className="button" href={paths.clientNew()}>
-          New client
-        </a>
-      </div>
-      <div className="toolbar filters">
-        <label>
-          Search{' '}
-          <input
+      <PageHeader
+        id="clients-heading"
+        title="Clients"
+        description="Everyone you photograph, with their contact details and sessions."
+        actions={
+          <Button asChild>
+            <a href={paths.clientNew()}>
+              <Plus aria-hidden="true" />
+              New client
+            </a>
+          </Button>
+        }
+      />
+      <FilterBar>
+        <label className="relative w-full sm:w-72">
+          <span className="sr-only">Search</span>
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
             type="search"
+            className="bg-card pl-9"
             maxLength={100}
             placeholder="Name or email"
             value={search}
@@ -37,39 +54,39 @@ export function ClientsPage({ workspaceId }: { workspaceId: string }) {
             }}
           />
         </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={archived}
-            onChange={(e) => {
-              setArchived(e.target.checked)
-              setPage(0)
-            }}
-          />{' '}
-          Show archived
-        </label>
-      </div>
-      {clients.state.kind === 'loading' && <p role="status">Loading clients…</p>}
+        <CheckboxField
+          label="Show archived"
+          checked={archived}
+          onChange={(checked) => {
+            setArchived(checked)
+            setPage(0)
+          }}
+        />
+      </FilterBar>
+      {clients.state.kind === 'loading' && <Loading>Loading clients…</Loading>}
       {clients.state.kind === 'error' && <LoadError error={clients.state.error} what="clients" onRetry={clients.reload} />}
       {clients.state.kind === 'loaded' && clients.state.value.totalItems === 0 && (
-        <p>
+        <EmptyState>
           {query
             ? 'No clients match your search.'
             : archived
               ? 'No archived clients.'
               : 'No clients yet. Add your first client to link them to sessions.'}
-        </p>
+        </EmptyState>
       )}
       {clients.state.kind === 'loaded' && clients.state.value.items.length > 0 && (
-        <ul className="records">
+        <RecordList>
           {clients.state.value.items.map((client) => (
-            <li key={client.id}>
-              <a href={paths.client(client.id)}>{client.name}</a>
-              {client.archivedAt && <span className="badge">Archived</span>}
-              <span className="muted">{[client.email, client.phone].filter(Boolean).join(' · ')}</span>
-            </li>
+            <RecordRow
+              key={client.id}
+              href={paths.client(client.id)}
+              leading={<Initials name={client.name} />}
+              title={client.name}
+              meta={[client.email, client.phone].filter(Boolean).join(' · ') || undefined}
+              trailing={client.archivedAt && <StatusBadge>Archived</StatusBadge>}
+            />
           ))}
-        </ul>
+        </RecordList>
       )}
       {clients.state.kind === 'loaded' && <Pager page={clients.state.value} onPage={setPage} />}
     </section>

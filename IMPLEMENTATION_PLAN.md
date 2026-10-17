@@ -953,6 +953,37 @@ sequentially and keep each change small enough to review and test.
     -   Photo deletion is not built. The retention rules for it are
         documented in ARCHITECTURE §8.
 
+### UI styling pass: done (2026-10-16)
+
+Not a numbered milestone: a cross-cutting restyle before Milestone 6,
+with no behavior, API, or routing changes. Decision: D15.
+
+-   Tailwind CSS v4 and shadcn/ui (button, input, textarea,
+    native-select, badge, alert, sheet) with HoneyBook-inspired
+    tokens in `frontend/src/index.css`, OS-driven dark mode, and
+    self-hosted Inter.
+-   Signed-in layout `src/layout/AppShell.tsx`: sidebar with the
+    workspace switcher, section navigation, and sign-out from `lg` up;
+    a top bar with a slide-in menu below. A skip-to-content link, and
+    the system status in the footer.
+-   Centered card layout for sign-in, first workspace, and loading.
+    Visitor gallery page with its own header and a full-width photo
+    grid.
+-   Shared pieces in `src/ui/`: page header, card panels, divided
+    record lists with whole-row links, labelled fields, status pills
+    with tones, loading/error/empty states, and photo tiles.
+-   Tests: `src/test/workspace.tsx` passes the new `Workspaces` props,
+    and the onboarding test in `App.test.tsx` checks the members list
+    (name, "Owner" badge) instead of the old "name (owner)" text.
+-   Verified: `cd frontend && npm run lint && npm run typecheck &&
+    npm test && npm run build`: 60 tests passed, lint clean, build
+    succeeded (JS about 116 kB gzipped, was about 81 kB).
+-   Not verified: no browser or backend was available where this was
+    built, so the layouts were not checked visually. Worth a manual
+    pass at 375, 768, and 1280 px wide, in light and dark: sign-in,
+    first workspace, sessions, clients, galleries, a session with
+    photos, a gallery, and a visitor link.
+
 ### Milestone 6: next
 
 AI content studio, first vertical slice: a brand profile, a

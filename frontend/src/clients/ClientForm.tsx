@@ -1,5 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { createClient, updateClient, type Client, type ClientInput } from '../api/clients.ts'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { ErrorText, Field, formCard, FormActions } from '../ui/Field.tsx'
 import { noFormError, toFormError, type FormError } from '../ui/formError.ts'
 
 type Props = {
@@ -41,36 +45,36 @@ export function ClientForm({ workspaceId, client, onSaved, onCancel }: Props) {
   }
 
   return (
-    <form onSubmit={submit} aria-label={client ? 'Edit client' : 'New client'} className="stack">
-      <label>
-        Name
-        <input required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
-      </label>
-      {error.fields.name && <p role="alert">Name {error.fields.name}</p>}
-      <label>
-        Email
-        <input type="email" maxLength={320} value={email} onChange={(e) => setEmail(e.target.value)} />
-      </label>
-      {error.fields.email && <p role="alert">Email {error.fields.email}</p>}
-      <label>
-        Phone
-        <input type="tel" maxLength={50} value={phone} onChange={(e) => setPhone(e.target.value)} />
-      </label>
-      {error.fields.phone && <p role="alert">Phone {error.fields.phone}</p>}
-      <label>
-        Notes
-        <textarea rows={4} maxLength={10000} value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </label>
-      {error.fields.notes && <p role="alert">Notes {error.fields.notes}</p>}
-      {error.message && <p role="alert">{error.message}</p>}
-      <div>
-        <button type="submit" disabled={submitting}>
+    <form
+      onSubmit={submit}
+      aria-label={client ? 'Edit client' : 'New client'}
+      className={formCard}
+    >
+      <Field label="Name" className="md:col-span-2" error={error.fields.name && `Name ${error.fields.name}`}>
+        <Input required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="Email" error={error.fields.email && `Email ${error.fields.email}`}>
+        <Input type="email" maxLength={320} value={email} onChange={(e) => setEmail(e.target.value)} />
+      </Field>
+      <Field label="Phone" error={error.fields.phone && `Phone ${error.fields.phone}`}>
+        <Input type="tel" maxLength={50} value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </Field>
+      <Field label="Notes" className="md:col-span-2" error={error.fields.notes && `Notes ${error.fields.notes}`}>
+        <Textarea rows={4} maxLength={10000} value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </Field>
+      {error.message && (
+        <div className="md:col-span-2">
+          <ErrorText>{error.message}</ErrorText>
+        </div>
+      )}
+      <FormActions>
+        <Button type="submit" disabled={submitting}>
           {submitting ? 'Saving…' : client ? 'Save client' : 'Create client'}
-        </button>{' '}
-        <button type="button" onClick={onCancel}>
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
-        </button>
-      </div>
+        </Button>
+      </FormActions>
     </form>
   )
 }

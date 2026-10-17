@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { createWorkspace, type Workspace } from './api/workspaces.ts'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ErrorText, Field } from './ui/Field.tsx'
 import { noFormError, toFormError, type FormError } from './ui/formError.ts'
 
 type Props = {
@@ -27,26 +30,22 @@ export function CreateWorkspaceForm({ onCreated, onCancel }: Props) {
   }
 
   return (
-    <form onSubmit={submit} aria-label="Create workspace" className="stack">
-      <label>
-        Business name
-        <input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
-      </label>
-      {error.fields.name && <p role="alert">Name {error.fields.name}</p>}
-      <label>
-        Time zone
-        <input required value={timezone} onChange={(e) => setTimezone(e.target.value)} />
-      </label>
-      {error.fields.timezone && <p role="alert">Time zone {error.fields.timezone}</p>}
-      {error.message && <p role="alert">{error.message}</p>}
-      <div>
-        <button type="submit" disabled={submitting}>
+    <form onSubmit={submit} aria-label="Create workspace" className="grid gap-4">
+      <Field label="Business name" error={error.fields.name && `Name ${error.fields.name}`}>
+        <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="Time zone" error={error.fields.timezone && `Time zone ${error.fields.timezone}`}>
+        <Input required value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+      </Field>
+      {error.message && <ErrorText>{error.message}</ErrorText>}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={submitting}>
           {submitting ? 'Creating…' : 'Create workspace'}
-        </button>{' '}
+        </Button>
         {onCancel && (
-          <button type="button" onClick={onCancel}>
+          <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
         )}
       </div>
     </form>

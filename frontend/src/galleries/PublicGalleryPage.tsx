@@ -5,6 +5,11 @@ import { formatDate } from '../time.ts'
 import { startDownload } from '../ui/download.ts'
 import { reference } from '../ui/formError.ts'
 import { useLoad } from '../useLoad.ts'
+import type { ReactNode } from 'react'
+import { Download, LinkIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Brand } from '../layout/Brand.tsx'
+import { EmptyState, ErrorAlert, Loading } from '../ui/Feedback.tsx'
 
 /**
  * What a client sees after opening a share link: the one gallery the token opens, without signing in. The
@@ -13,27 +18,53 @@ import { useLoad } from '../useLoad.ts'
 export function PublicGalleryPage({ token }: { token: string }) {
   const gallery = useLoad((signal) => fetchPublicGallery(token, signal), [token])
 
-  if (gallery.state.kind === 'loading') return <p role="status">Loading gallery…</p>
-  if (gallery.state.kind === 'error') {
+  let content
+  if (gallery.state.kind === 'loading') content = <Loading>Loading gallery…</Loading>
+  else if (gallery.state.kind === 'error') {
     const error = gallery.state.error
-    if (error instanceof ApiError && error.status === 404) {
-      return (
-        <section aria-labelledby="gallery-unavailable-heading">
-          <h1 id="gallery-unavailable-heading">This gallery link does not work</h1>
-          <p>It may have expired or been revoked, or the gallery is no longer shared. Ask your photographer for a new link.</p>
+    content =
+      error instanceof ApiError && error.status === 404 ? (
+        <section
+          aria-labelledby="gallery-unavailable-heading"
+          className="mx-auto max-w-md space-y-3 rounded-2xl border bg-card p-8 text-center shadow-sm"
+        >
+          <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground">
+            <LinkIcon className="size-5" aria-hidden="true" />
+          </span>
+          <h1 id="gallery-unavailable-heading" className="text-xl font-semibold">
+            This gallery link does not work
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            It may have expired or been revoked, or the gallery is no longer shared. Ask your photographer for a new link.
+          </p>
         </section>
+      ) : (
+        <ErrorAlert>
+          <span className="flex flex-wrap items-center gap-3">
+            Could not load the gallery{reference(error)}.{' '}
+            <Button type="button" variant="outline" size="sm" onClick={gallery.reload}>
+              Retry
+            </Button>
+          </span>
+        </ErrorAlert>
       )
-    }
-    return (
-      <p role="alert">
-        Could not load the gallery{reference(error)}.{' '}
-        <button type="button" onClick={gallery.reload}>
-          Retry
-        </button>
-      </p>
-    )
-  }
-  return <GalleryView token={token} gallery={gallery.state.value} />
+  } else content = <GalleryView token={token} gallery={gallery.state.value} />
+
+  return <PublicLayout>{content}</PublicLayout>
+}
+
+/** A visitor's page: no app navigation, just the gallery. */
+function PublicLayout({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-12 lg:px-8">{children}</main>
+      <footer className="flex justify-center px-4 py-6 text-xs text-muted-foreground opacity-80">
+        <span className="flex items-center gap-2">
+          Shared with <Brand />
+        </span>
+      </footer>
+    </div>
+  )
 }
 
 function GalleryView({ token, gallery }: { token: string; gallery: PublicGallery }) {
@@ -60,30 +91,45 @@ function GalleryView({ token, gallery }: { token: string; gallery: PublicGallery
   const downloadLabel = gallery.downloads === 'ORIGINALS' ? 'Download original' : 'Download'
   return (
     <section aria-labelledby="public-gallery-heading">
-      <h1 id="public-gallery-heading">{gallery.title}</h1>
-      <p>
-        By {gallery.studioName} ·{' '}
-        <span className="muted">This link works until {formatDate(gallery.linkExpiresAt, timezone)}.</span>
-      </p>
-      {error && <p role="alert">{error}</p>}
+      <header className="mb-8 space-y-3 text-center sm:mb-12">
+        <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase">By {gallery.studioName}</p>
+        <h1 id="public-gallery-heading" className="text-3xl font-semibold sm:text-5xl">
+          {gallery.title}
+        </h1>
+        <p className="text-sm text-muted-foreground">This link works until {formatDate(gallery.linkExpiresAt, timezone)}.</p>
+      </header>
+      {error && (
+        <div className="mx-auto mb-6 max-w-2xl">
+          <ErrorAlert>{error}</ErrorAlert>
+        </div>
+      )}
       {gallery.photos.length === 0 ? (
-        <p className="muted">This gallery has no photos.</p>
+        <EmptyState>This gallery has no photos.</EmptyState>
       ) : (
-        <ul className="photo-grid public-grid" aria-label="Photos">
+        <ul className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4" aria-label="Photos">
           {gallery.photos.map((photo, index) => (
-            <li key={photo.id}>
-              <a href={photo.previewUrl} target="_blank" rel="noreferrer">
-                <img src={photo.thumbnailUrl} alt={`Photo ${index + 1}`} loading="lazy" />
+            <li key={photo.id} className="group relative overflow-hidden rounded-xl bg-muted">
+              <a href={photo.previewUrl} target="_blank" rel="noreferrer" className="block rounded-xl">
+                <img
+                  src={photo.thumbnailUrl}
+                  alt={`Photo ${index + 1}`}
+                  loading="lazy"
+                  className="block aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                />
               </a>
               {gallery.downloads !== 'NONE' && (
-                <button
+                <Button
                   type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="absolute right-2 bottom-2 bg-card/90 shadow-sm backdrop-blur hover:bg-card"
                   disabled={downloading !== null}
                   onClick={() => download(photo)}
                   aria-label={`${downloadLabel}: photo ${index + 1}`}
                 >
+                  <Download aria-hidden="true" />
                   {downloading === photo.id ? 'Starting…' : downloadLabel}
-                </button>
+                </Button>
               )}
             </li>
           ))}

@@ -58,6 +58,6 @@ export function session(overrides: Record<string, unknown> = {}) {
 export function renderWorkspace(hash: string, routes: Parameters<typeof mockApi>[0]) {
   window.location.hash = hash
   const fetch = mockApi({ 'GET /api/workspaces': () => json([workspace]), ...routes })
-  render(<Workspaces />)
+  render(<Workspaces userName="Alice" onSignOut={() => {}} />)
   return fetch
 }

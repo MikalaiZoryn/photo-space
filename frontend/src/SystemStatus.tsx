@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { cn } from 'cn'
 import { fetchHealth, type Health } from './api/health.ts'
 
 type HealthState =
@@ -19,9 +20,19 @@ export function SystemStatus() {
     return () => controller.abort()
   }, [])
 
+  const healthy = state.kind === 'loaded' && state.health.status === 'UP' && state.health.database === 'UP'
   return (
-    <section aria-labelledby="status-heading" className="system-status">
-      <h2 id="status-heading">System status</h2>
+    <section aria-labelledby="status-heading" className="flex items-center gap-2 text-xs text-muted-foreground">
+      <h2 id="status-heading" className="sr-only">
+        System status
+      </h2>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'size-2 rounded-full',
+          state.kind === 'loading' ? 'bg-muted-foreground/40' : healthy ? 'bg-tone-success' : 'bg-tone-danger',
+        )}
+      />
       <p role="status">{describe(state)}</p>
     </section>
   )

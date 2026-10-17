@@ -139,3 +139,17 @@ A short record of decisions that the project documents left open. Add new entrie
   - Each gallery open and each download is recorded in `gallery_access_events` with the link, the photo, and the time only. The link list shows views, downloads, and last use per link.
 - **Why:** tying a gallery to one session matches how photographers deliver, and keeps the picker and the database rules simple. Header-plus-fragment transport keeps a long-lived credential out of every log the platform or a CDN would write.
 - **Consequences:** a gallery cannot mix photos from several sessions yet. Relaxing that means dropping the session from the foreign keys. A visitor page left open longer than 10 minutes needs a reload for fresh image URLs, and each reload counts as a view. There is no zip download of a whole gallery yet. There is no rate limit on the visitor API: tokens can't be guessed, and request throttling (WAF) comes with Milestone 8.
+
+## D15: Frontend styling with Tailwind CSS and shadcn/ui
+
+- **Date:** 2026-10-16 (UI styling pass, between Milestones 5 and 6)
+- **Decision:**
+  - Tailwind CSS v4 through `@tailwindcss/vite`, configured in CSS (`src/index.css`); there is no `tailwind.config.js`. shadcn/ui components (Radix base, "vega" style) are copied into `src/components/ui/` by the shadcn CLI (`components.json`) and are ours to edit. Only the components in use are kept. Class names are merged with `cn`.
+  - The look is HoneyBook-inspired: a soft grey canvas, white cards, near-black primary buttons, a violet accent for selection and focus, and tinted status pills. All colors are CSS variables in `src/index.css`. Status tones (`info`, `success`, `warning`, `danger`, `neutral`) are tokens too, used through `src/ui/StatusBadge.tsx`.
+  - Dark mode follows the operating system (`prefers-color-scheme`); the `dark:` variant is bound to that media query. There is no in-app toggle.
+  - Inter is self-hosted through `@fontsource-variable/inter`, bundled by Vite, so visitor gallery pages make no third-party font requests.
+  - Signed-in pages use a sidebar from the `lg` breakpoint and a top bar with a slide-in menu (shadcn `Sheet`) below it. Signed-out, first-run, and visitor pages have no app navigation.
+  - Selects, checkboxes, and file inputs stay native elements, styled with Tailwind, for accessibility, mobile pickers, and simple tests.
+- **Why:** utility classes plus owned components let us move fast without a runtime UI kit, and tokens keep the theme in one place.
+- **Consequences:** the production bundle grew from about 81 kB to about 116 kB of gzipped JavaScript (Radix dialog and icons) and from about 1 kB to about 10 kB of gzipped CSS. Inter's font files load per Unicode range, on demand. shadcn components are not upgraded automatically; re-run the CLI to pull a newer version of one.
+

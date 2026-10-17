@@ -16,7 +16,17 @@ import { toFormError } from '../ui/formError.ts'
 import { LoadError } from '../ui/LoadError.tsx'
 import { Pager } from '../ui/Pager.tsx'
 import { useLoad } from '../useLoad.ts'
-import { downloadLabels, galleryStatusLabels } from './labels.ts'
+import { Archive, ArchiveRestore, ArrowLeft, ArrowRight, EyeOff, Plus, Send, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { EmptyState, ErrorAlert, Loading, photoGrid } from '../ui/Feedback.tsx'
+import { Field } from '../ui/Field.tsx'
+import { PageHeader } from '../ui/PageHeader.tsx'
+import { Panel } from '../ui/Panel.tsx'
+import { PhotoFigure, PhotoImage } from '../ui/Photo.tsx'
+import { StatusBadge } from '../ui/StatusBadge.tsx'
+import { downloadLabels, galleryStatusLabels, galleryStatusTones } from './labels.ts'
 import { ShareLinks } from './ShareLinks.tsx'
 
 const PICKER_PAGE_SIZE = 100
@@ -27,7 +37,7 @@ type Props = { workspaceId: string; galleryId: string; timezone: string }
 export function GalleryPage({ workspaceId, galleryId, timezone }: Props) {
   const detail = useLoad((signal) => getGallery(workspaceId, galleryId, signal), [workspaceId, galleryId])
 
-  if (detail.state.kind === 'loading') return <p role="status">Loading gallery…</p>
+  if (detail.state.kind === 'loading') return <Loading>Loading gallery…</Loading>
   if (detail.state.kind === 'error') {
     return <LoadError error={detail.state.error} what="gallery" onRetry={detail.reload} />
   }
@@ -65,72 +75,86 @@ function GalleryView({ workspaceId, timezone, detail, onChange }: ViewProps) {
 
   return (
     <section aria-labelledby="gallery-heading">
-      <p>
-        <a href={paths.galleries()}>← All galleries</a> · <a href={paths.session(gallery.sessionId)}>Session</a>
-      </p>
-      <div className="toolbar">
-        <h3 id="gallery-heading">
-          {gallery.title}{' '}
-          <span className={`badge gallery-${gallery.status.toLowerCase()}`}>{galleryStatusLabels[gallery.status]}</span>{' '}
-          {archived && <span className="badge">Archived</span>}
-        </h3>
-        <span>
-          {!archived && (
-            <button
+      <PageHeader
+        id="gallery-heading"
+        title={gallery.title}
+        back={{ href: paths.galleries(), label: 'All galleries' }}
+        badges={
+          <>
+            <StatusBadge tone={galleryStatusTones[gallery.status]}>{galleryStatusLabels[gallery.status]}</StatusBadge>
+            {archived && <StatusBadge>Archived</StatusBadge>}
+          </>
+        }
+        description={
+          <>
+            {archived
+              ? 'Archived galleries are closed to visitors. Restore it to change it or share it again.'
+              : published
+                ? 'Anyone with an active link can view this gallery.'
+                : 'Draft: links do not open this gallery until you publish it.'}{' '}
+            <a href={paths.session(gallery.sessionId)} className="font-medium text-accent-foreground hover:underline">
+              Session
+            </a>
+          </>
+        }
+        actions={
+          <>
+            <Button
               type="button"
+              variant="outline"
               disabled={busy}
               onClick={() =>
                 run(
-                  () => changeGalleryStatus(workspaceId, gallery.id, published ? 'DRAFT' : 'PUBLISHED'),
-                  published ? 'unpublish the gallery' : 'publish the gallery',
+                  () => setGalleryArchived(workspaceId, gallery.id, !archived),
+                  archived ? 'restore the gallery' : 'archive the gallery',
                 )
               }
             >
-              {published ? 'Unpublish' : 'Publish'}
-            </button>
-          )}{' '}
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              run(
-                () => setGalleryArchived(workspaceId, gallery.id, !archived),
-                archived ? 'restore the gallery' : 'archive the gallery',
-              )
-            }
-          >
-            {archived ? 'Restore' : 'Archive'}
-          </button>
-        </span>
-      </div>
-      {actionError && <p role="alert">{actionError}</p>}
-      <p className="muted">
-        {archived
-          ? 'Archived galleries are closed to visitors. Restore it to change it or share it again.'
-          : published
-            ? 'Anyone with an active link can view this gallery.'
-            : 'Draft: links do not open this gallery until you publish it.'}
-      </p>
-      {!archived && (
-        <GallerySettings
-          key={gallery.version}
-          detail={detail}
-          busy={busy}
-          onSave={(input) => run(() => updateGallery(workspaceId, gallery.id, gallery.version, input), 'save the settings')}
-        />
-      )}
-      {archived && <p>Downloads: {downloadLabels[gallery.downloads]}</p>}
-      <GalleryPhotos
-        workspaceId={workspaceId}
-        detail={detail}
-        editable={!archived}
-        busy={busy}
-        onSave={(assetIds) =>
-          run(() => setGalleryPhotos(workspaceId, gallery.id, gallery.version, assetIds), 'save the photos')
+              {archived ? <ArchiveRestore aria-hidden="true" /> : <Archive aria-hidden="true" />}
+              {archived ? 'Restore' : 'Archive'}
+            </Button>
+            {!archived && (
+              <Button
+                type="button"
+                variant={published ? 'outline' : 'default'}
+                disabled={busy}
+                onClick={() =>
+                  run(
+                    () => changeGalleryStatus(workspaceId, gallery.id, published ? 'DRAFT' : 'PUBLISHED'),
+                    published ? 'unpublish the gallery' : 'publish the gallery',
+                  )
+                }
+              >
+                {published ? <EyeOff aria-hidden="true" /> : <Send aria-hidden="true" />}
+                {published ? 'Unpublish' : 'Publish'}
+              </Button>
+            )}
+          </>
         }
       />
-      <ShareLinks workspaceId={workspaceId} timezone={timezone} gallery={gallery} />
-      <p className="muted">Created {formatDate(gallery.createdAt, timezone)}</p>
+      <div className="space-y-6">
+        {actionError && <ErrorAlert>{actionError}</ErrorAlert>}
+        {!archived && (
+          <GallerySettings
+            key={gallery.version}
+            detail={detail}
+            busy={busy}
+            onSave={(input) => run(() => updateGallery(workspaceId, gallery.id, gallery.version, input), 'save the settings')}
+          />
+        )}
+        {archived && <p className="text-sm">Downloads: {downloadLabels[gallery.downloads]}</p>}
+        <GalleryPhotos
+          workspaceId={workspaceId}
+          detail={detail}
+          editable={!archived}
+          busy={busy}
+          onSave={(assetIds) =>
+            run(() => setGalleryPhotos(workspaceId, gallery.id, gallery.version, assetIds), 'save the photos')
+          }
+        />
+        <ShareLinks workspaceId={workspaceId} timezone={timezone} gallery={gallery} />
+        <p className="text-sm text-muted-foreground">Created {formatDate(gallery.createdAt, timezone)}</p>
+      </div>
     </section>
   )
 }
@@ -154,23 +178,26 @@ function GallerySettings({
   }
 
   return (
-    <form className="toolbar filters" onSubmit={submit} aria-label="Gallery settings">
-      <label>
-        Title <input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
-      </label>
-      <label>
-        Downloads{' '}
-        <select value={downloads} onChange={(e) => setDownloads(e.target.value as GalleryDownloads)}>
+    <form
+      className="grid items-end gap-4 rounded-xl border bg-card p-4 shadow-xs sm:p-6 md:grid-cols-[1fr_1fr_auto]"
+      onSubmit={submit}
+      aria-label="Gallery settings"
+    >
+      <Field label="Title">
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
+      </Field>
+      <Field label="Downloads">
+        <NativeSelect className="w-full" value={downloads} onChange={(e) => setDownloads(e.target.value as GalleryDownloads)}>
           {GALLERY_DOWNLOADS.map((d) => (
-            <option key={d} value={d}>
+            <NativeSelectOption key={d} value={d}>
               {downloadLabels[d]}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
-      </label>
-      <button type="submit" disabled={busy || !changed}>
+        </NativeSelect>
+      </Field>
+      <Button type="submit" variant="secondary" disabled={busy || !changed}>
         Save settings
-      </button>
+      </Button>
     </form>
   )
 }
@@ -196,48 +223,56 @@ function GalleryPhotos({ workspaceId, detail, editable, busy, onSave }: PhotosPr
   }
 
   return (
-    <section aria-labelledby="gallery-photos-heading">
-      <h4 id="gallery-photos-heading">
-        Photos in this gallery ({photos.length})
-      </h4>
+    <Panel id="gallery-photos-heading" title={`Photos in this gallery (${photos.length})`}>
       {photos.length === 0 ? (
-        <p className="muted">No photos yet. Add some from the session below, then publish the gallery.</p>
+        <EmptyState>No photos yet. Add some from the session below, then publish the gallery.</EmptyState>
       ) : (
-        <ol className="photo-grid" aria-label="Gallery photos">
+        <ol className={photoGrid} aria-label="Gallery photos">
           {photos.map((photo, index) => (
-            <li key={photo.id}>
-              <figure>
-                {photo.thumbnailUrl && <img src={photo.thumbnailUrl} alt={photo.originalFilename} loading="lazy" />}
-                <figcaption>
-                  {index + 1}. {photo.originalFilename}
-                </figcaption>
-              </figure>
+            <li key={photo.id} className="space-y-2">
+              <PhotoFigure caption={`${index + 1}. ${photo.originalFilename}`}>
+                {photo.thumbnailUrl ? (
+                  <PhotoImage src={photo.thumbnailUrl} alt={photo.originalFilename} />
+                ) : (
+                  <div className="aspect-square bg-muted" />
+                )}
+              </PhotoFigure>
               {editable && (
-                <span className="photo-actions">
-                  <button
+                <span className="flex gap-1">
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="icon-sm"
                     disabled={busy || index === 0}
                     onClick={() => move(index, -1)}
                     aria-label={`Move ${photo.originalFilename} earlier`}
+                    title="Move earlier"
                   >
-                    ←
-                  </button>
-                  <button
+                    <ArrowLeft aria-hidden="true" />
+                  </Button>
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="icon-sm"
                     disabled={busy || index === photos.length - 1}
                     onClick={() => move(index, 1)}
                     aria-label={`Move ${photo.originalFilename} later`}
+                    title="Move later"
                   >
-                    →
-                  </button>
-                  <button
+                    <ArrowRight aria-hidden="true" />
+                  </Button>
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="ml-auto text-destructive hover:text-destructive"
                     disabled={busy}
                     onClick={() => onSave(ids.filter((id) => id !== photo.id))}
                     aria-label={`Remove ${photo.originalFilename}`}
+                    title="Remove"
                   >
-                    Remove
-                  </button>
+                    <Trash2 aria-hidden="true" />
+                  </Button>
                 </span>
               )}
             </li>
@@ -253,7 +288,7 @@ function GalleryPhotos({ workspaceId, detail, editable, busy, onSave }: PhotosPr
           onAdd={(added) => onSave([...ids, ...added])}
         />
       )}
-    </section>
+    </Panel>
   )
 }
 
@@ -274,7 +309,7 @@ function SessionPhotoPicker({ workspaceId, sessionId, inGallery, busy, onAdd }: 
   )
 
   let content
-  if (assets.state.kind === 'loading') content = <p role="status">Loading the session's photos…</p>
+  if (assets.state.kind === 'loading') content = <Loading>Loading the session's photos…</Loading>
   else if (assets.state.kind === 'error') {
     content = <LoadError error={assets.state.error} what="session's photos" onRetry={assets.reload} />
   } else {
@@ -283,24 +318,29 @@ function SessionPhotoPicker({ workspaceId, sessionId, inGallery, busy, onAdd }: 
     content = (
       <>
         {available.length === 0 ? (
-          <p className="muted">Every ready photo on this page of the session is in the gallery.</p>
+          <p className="text-sm text-muted-foreground">Every ready photo on this page of the session is in the gallery.</p>
         ) : (
           <>
-            <button type="button" disabled={busy} onClick={() => onAdd(available.map((photo) => photo.id))}>
+            <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => onAdd(available.map((photo) => photo.id))}>
+              <Plus aria-hidden="true" />
               Add all {available.length}
-            </button>
-            <ul className="photo-grid" aria-label="Session photos to add">
+            </Button>
+            <ul className={photoGrid} aria-label="Session photos to add">
               {available.map((photo) => (
-                <li key={photo.id}>
+                <li key={photo.id} className="space-y-2">
                   <PickerTile photo={photo} />
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
                     disabled={busy}
                     onClick={() => onAdd([photo.id])}
                     aria-label={`Add ${photo.originalFilename}`}
                   >
+                    <Plus aria-hidden="true" />
                     Add
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -312,8 +352,10 @@ function SessionPhotoPicker({ workspaceId, sessionId, inGallery, busy, onAdd }: 
   }
 
   return (
-    <section aria-labelledby="picker-heading">
-      <h4 id="picker-heading">Add photos from the session</h4>
+    <section aria-labelledby="picker-heading" className="space-y-4 border-t pt-6">
+      <h5 id="picker-heading" className="text-sm font-semibold">
+        Add photos from the session
+      </h5>
       {content}
     </section>
   )
@@ -321,9 +363,8 @@ function SessionPhotoPicker({ workspaceId, sessionId, inGallery, busy, onAdd }: 
 
 function PickerTile({ photo }: { photo: PhotoAsset }) {
   return (
-    <figure>
-      {photo.thumbnailUrl && <img src={photo.thumbnailUrl} alt={photo.originalFilename} loading="lazy" />}
-      <figcaption>{photo.originalFilename}</figcaption>
-    </figure>
+    <PhotoFigure caption={photo.originalFilename}>
+      {photo.thumbnailUrl ? <PhotoImage src={photo.thumbnailUrl} alt={photo.originalFilename} /> : <div className="aspect-square bg-muted" />}
+    </PhotoFigure>
   )
 }

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { fetchAuthOptions, fetchMe, signOut, type AuthOptions, type Me } from './api/auth.ts'
 import { PublicGalleryPage } from './galleries/PublicGalleryPage.tsx'
 import { usePublicGalleryToken } from './routing.ts'
+import { CenteredLayout } from './layout/CenteredLayout.tsx'
 import { SignIn } from './SignIn.tsx'
-import { SystemStatus } from './SystemStatus.tsx'
+import { Button } from '@/components/ui/button'
+import { ErrorAlert, Loading } from './ui/Feedback.tsx'
 import { Workspaces } from './Workspaces.tsx'
 
 type Session =
@@ -16,11 +18,7 @@ function App() {
   const galleryToken = usePublicGalleryToken()
   // A gallery visitor's link: only that gallery, without the sign-in flow or any workspace API call.
   if (galleryToken !== null) {
-    return (
-      <main>
-        <PublicGalleryPage key={galleryToken} token={galleryToken} />
-      </main>
-    )
+    return <PublicGalleryPage key={galleryToken} token={galleryToken} />
   }
   return <WorkspaceApp />
 }
@@ -61,35 +59,28 @@ function WorkspaceApp() {
     }
   }
 
+  const signOutAlert = signOutFailed && <ErrorAlert>Sign-out failed. Please try again.</ErrorAlert>
+
+  if (session.kind === 'signedIn') {
+    return <Workspaces userName={session.me.displayName} onSignOut={handleSignOut} notice={signOutAlert} />
+  }
   return (
-    <main>
-      <header className="toolbar">
-        <h1>photo-space</h1>
-        {session.kind === 'signedIn' && (
-          <span>
-            {session.me.displayName}{' '}
-            <button type="button" onClick={handleSignOut}>
-              Sign out
-            </button>
-          </span>
-        )}
-      </header>
-      {signOutFailed && <p role="alert">Sign-out failed. Please try again.</p>}
-      {session.kind === 'loading' && <p role="status">Loading…</p>}
+    <CenteredLayout>
+      {session.kind === 'loading' && <Loading>Loading…</Loading>}
       {session.kind === 'error' && (
-        <p role="alert">
-          Could not reach the server.{' '}
-          <button type="button" onClick={reload}>
-            Retry
-          </button>
-        </p>
+        <ErrorAlert>
+          <span className="flex flex-wrap items-center gap-3">
+            Could not reach the server.{' '}
+            <Button type="button" variant="outline" size="sm" onClick={reload}>
+              Retry
+            </Button>
+          </span>
+        </ErrorAlert>
       )}
       {session.kind === 'signedOut' && (
         <SignIn options={session.options} signInFailed={signInFailed} onSignedIn={reload} />
       )}
-      {session.kind === 'signedIn' && <Workspaces />}
-      <SystemStatus />
-    </main>
+    </CenteredLayout>
   )
 }
 

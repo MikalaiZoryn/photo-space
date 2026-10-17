@@ -1,4 +1,5 @@
 import type { SessionStatus } from '../api/sessions.ts'
+import type { Tone } from '../ui/StatusBadge.tsx'
 
 export const statusLabels: Record<SessionStatus, string> = {
   INQUIRY: 'Inquiry',
@@ -15,4 +16,12 @@ export const statusActions: Record<SessionStatus, string> = {
   COMPLETED: 'Mark completed',
   DELIVERED: 'Mark delivered',
   CANCELLED: 'Cancel session',
+}
+
+export const statusTones: Record<SessionStatus, Tone> = {
+  INQUIRY: 'warning',
+  BOOKED: 'info',
+  COMPLETED: 'success',
+  DELIVERED: 'success',
+  CANCELLED: 'neutral',
 }

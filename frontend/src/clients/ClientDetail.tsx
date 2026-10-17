@@ -6,6 +6,13 @@ import { formatDate } from '../time.ts'
 import { reference } from '../ui/formError.ts'
 import { LoadError } from '../ui/LoadError.tsx'
 import { useLoad } from '../useLoad.ts'
+import { Archive, ArchiveRestore, Pencil, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ErrorAlert, Loading } from '../ui/Feedback.tsx'
+import { FieldItem, Fields } from '../ui/Fields.tsx'
+import { PageHeader } from '../ui/PageHeader.tsx'
+import { Panel } from '../ui/Panel.tsx'
+import { StatusBadge } from '../ui/StatusBadge.tsx'
 import { ClientForm } from './ClientForm.tsx'
 
 type Props = { workspaceId: string; timezone: string; clientId: string }
@@ -13,7 +20,7 @@ type Props = { workspaceId: string; timezone: string; clientId: string }
 export function ClientDetail({ workspaceId, timezone, clientId }: Props) {
   const client = useLoad((signal) => getClient(workspaceId, clientId, signal), [workspaceId, clientId])
 
-  if (client.state.kind === 'loading') return <p role="status">Loading client…</p>
+  if (client.state.kind === 'loading') return <Loading>Loading client…</Loading>
   if (client.state.kind === 'error') return <LoadError error={client.state.error} what="client" onRetry={client.reload} />
   return <ClientView workspaceId={workspaceId} timezone={timezone} client={client.state.value} onChange={client.replace} />
 }
@@ -21,18 +28,18 @@ export function ClientDetail({ workspaceId, timezone, clientId }: Props) {
 export function EditClient({ workspaceId, clientId }: { workspaceId: string; clientId: string }) {
   const client = useLoad((signal) => getClient(workspaceId, clientId, signal), [workspaceId, clientId])
 
-  if (client.state.kind === 'loading') return <p role="status">Loading client…</p>
+  if (client.state.kind === 'loading') return <Loading>Loading client…</Loading>
   if (client.state.kind === 'error') return <LoadError error={client.state.error} what="client" onRetry={client.reload} />
   if (client.state.value.archivedAt) {
     return (
-      <p role="alert">
+      <ErrorAlert>
         This client is archived. Restore it before editing. <a href={paths.client(clientId)}>Back to client</a>
-      </p>
+      </ErrorAlert>
     )
   }
   return (
     <section aria-labelledby="edit-client-heading">
-      <h3 id="edit-client-heading">Edit client</h3>
+      <PageHeader id="edit-client-heading" title="Edit client" back={{ href: paths.client(clientId), label: 'Back to client' }} />
       <ClientForm
         workspaceId={workspaceId}
         client={client.state.value}
@@ -46,7 +53,7 @@ export function EditClient({ workspaceId, clientId }: { workspaceId: string; cli
 export function NewClient({ workspaceId }: { workspaceId: string }) {
   return (
     <section aria-labelledby="new-client-heading">
-      <h3 id="new-client-heading">New client</h3>
+      <PageHeader id="new-client-heading" title="New client" back={{ href: paths.clients(), label: 'All clients' }} />
       <ClientForm
         workspaceId={workspaceId}
         onSaved={(saved) => navigate(paths.client(saved.id))}
@@ -85,48 +92,60 @@ function ClientView({
 
   return (
     <section aria-labelledby="client-heading">
-      <p>
-        <a href={paths.clients()}>← All clients</a>
-      </p>
-      <div className="toolbar">
-        <h3 id="client-heading">
-          {client.name} {archived && <span className="badge">Archived</span>}
-        </h3>
-        <span>
-          {!archived && (
-            <a className="button" href={paths.clientEdit(client.id)}>
-              Edit
-            </a>
-          )}{' '}
-          <button type="button" disabled={busy} onClick={toggleArchived}>
-            {archived ? 'Restore' : 'Archive'}
-          </button>
-        </span>
-      </div>
-      {actionError && <p role="alert">{actionError}</p>}
-      {archived && client.archivedAt && (
-        <p className="muted">
-          Archived on {formatDate(client.archivedAt, timezone)}. Archived clients are hidden from lists and cannot be
-          linked to new sessions.
-        </p>
-      )}
-      <dl className="fields">
-        <dt>Email</dt>
-        <dd>{client.email ? <a href={`mailto:${client.email}`}>{client.email}</a> : '—'}</dd>
-        <dt>Phone</dt>
-        <dd>{client.phone ? <a href={`tel:${client.phone}`}>{client.phone}</a> : '—'}</dd>
-        <dt>Notes</dt>
-        <dd className="notes">{client.notes ?? '—'}</dd>
-      </dl>
-      <div className="toolbar">
-        <h4>Sessions</h4>
-        {!archived && (
-          <a className="button" href={paths.sessionNew(client.id)}>
-            New session for {client.name}
-          </a>
+      <PageHeader
+        id="client-heading"
+        title={client.name}
+        back={{ href: paths.clients(), label: 'All clients' }}
+        badges={archived && <StatusBadge>Archived</StatusBadge>}
+        actions={
+          <>
+            {!archived && (
+              <Button asChild variant="outline">
+                <a href={paths.clientEdit(client.id)}>
+                  <Pencil aria-hidden="true" />
+                  Edit
+                </a>
+              </Button>
+            )}
+            <Button type="button" variant="outline" disabled={busy} onClick={toggleArchived}>
+              {archived ? <ArchiveRestore aria-hidden="true" /> : <Archive aria-hidden="true" />}
+              {archived ? 'Restore' : 'Archive'}
+            </Button>
+          </>
+        }
+      />
+      <div className="space-y-6">
+        {actionError && <ErrorAlert>{actionError}</ErrorAlert>}
+        {archived && client.archivedAt && (
+          <p className="text-sm text-muted-foreground">
+            Archived on {formatDate(client.archivedAt, timezone)}. Archived clients are hidden from lists and cannot be
+            linked to new sessions.
+          </p>
         )}
+        <Fields>
+          <FieldItem label="Email">{client.email ? <a href={`mailto:${client.email}`}>{client.email}</a> : '—'}</FieldItem>
+          <FieldItem label="Phone">{client.phone ? <a href={`tel:${client.phone}`}>{client.phone}</a> : '—'}</FieldItem>
+          <FieldItem label="Notes" wide>
+            <span className="whitespace-pre-wrap">{client.notes ?? '—'}</span>
+          </FieldItem>
+        </Fields>
+        <Panel
+          id="client-sessions-heading"
+          title="Sessions"
+          actions={
+            !archived && (
+              <Button asChild size="sm">
+                <a href={paths.sessionNew(client.id)}>
+                  <Plus aria-hidden="true" />
+                  New session for {client.name}
+                </a>
+              </Button>
+            )
+          }
+        >
+          <SessionList workspaceId={workspaceId} filter={{ clientId: client.id }} emptyText="No sessions with this client yet." />
+        </Panel>
       </div>
-      <SessionList workspaceId={workspaceId} filter={{ clientId: client.id }} emptyText="No sessions with this client yet." />
     </section>
   )
 }

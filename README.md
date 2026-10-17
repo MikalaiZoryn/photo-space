@@ -15,7 +15,7 @@ A management platform for photography businesses. It covers clients and sessions
 ## Repository layout
 
 ```text
-frontend/          React + TypeScript + Vite web app (Vitest, oxlint)
+frontend/          React + TypeScript + Vite web app (Tailwind CSS, shadcn/ui, Vitest, oxlint)
 backend/           Java + Spring Boot modular monolith (Maven wrapper, Flyway)
 infra/             AWS CDK app in TypeScript: private photo bucket and job queues per environment
 local/             Config for the local emulators (ElasticMQ queues)
