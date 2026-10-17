@@ -1,10 +1,11 @@
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { LogOut, Menu } from 'lucide-react'
+import { LogOut, Menu, Monitor, Moon, Sun } from 'lucide-react'
 import { cn } from 'cn'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { SystemStatus } from '../SystemStatus.tsx'
+import { useTheme, type ThemeChoice } from '../theme.ts'
 import { Initials } from '../ui/RecordList.tsx'
 import { Brand } from './Brand.tsx'
 
@@ -108,11 +109,30 @@ function Sidebar({ userName, onSignOut, switcher, nav }: Omit<Props, 'children' 
       <div className="mt-auto flex items-center gap-3 border-t pt-4">
         <Initials name={userName} />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{userName}</span>
+        <ThemeToggle />
         <Button type="button" variant="ghost" size="icon" aria-label="Sign out" title="Sign out" onClick={onSignOut}>
           <LogOut aria-hidden="true" />
         </Button>
       </div>
     </div>
+  )
+}
+
+const THEMES: Record<ThemeChoice, { label: string; icon: LucideIcon; next: ThemeChoice }> = {
+  system: { label: 'System', icon: Monitor, next: 'light' },
+  light: { label: 'Light', icon: Sun, next: 'dark' },
+  dark: { label: 'Dark', icon: Moon, next: 'system' },
+}
+
+/** Cycles the color theme: system, light, dark. The icon shows the current choice. */
+function ThemeToggle() {
+  const [theme, setTheme] = useTheme()
+  const { label, icon: Icon, next } = THEMES[theme]
+  const hint = `Theme: ${label}. Switch to ${THEMES[next].label.toLowerCase()}`
+  return (
+    <Button type="button" variant="ghost" size="icon" aria-label={hint} title={hint} onClick={() => setTheme(next)}>
+      <Icon aria-hidden="true" />
+    </Button>
   )
 }
 

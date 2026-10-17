@@ -1692,3 +1692,31 @@ not one of the numbered milestones. Built on the branch `dashboard`.
         over 500 kB (527 kB; 468 kB before).
 -   **Not verified:** a browser run (pointer and touch dragging, the
     grid at phone width).
+
+### Out of plan: theme toggle (code done 2026-10-17; no browser run)
+
+Requested by the user ("implement theme switching toggle"); not a
+numbered milestone. Decision: D15, amended.
+
+-   A button in the sidebar footer, next to **Sign out**, cycles the
+    theme: System, Light, Dark. Its icon shows the current choice
+    (monitor, sun, moon). The choice is stored per browser in
+    `localStorage` under `photospace.theme`; System removes the key and
+    follows the OS setting live.
+-   `src/theme.ts` (`useTheme`) sets `data-theme` on `<html>` and the
+    `theme-color` meta tags. `public/theme.js`, loaded from `<head>` in
+    `index.html`, sets `data-theme` before first paint, so pages
+    without the sidebar (sign-in, visitor galleries) use the saved
+    choice too. It is a same-origin file because the CSP
+    (`script-src 'self'`) blocks inline scripts.
+-   `src/index.css`: the dark tokens and the `dark:` variant key on
+    `[data-theme="dark"]` instead of the `prefers-color-scheme` media
+    query.
+-   **Verified locally on 2026-10-17:** `cd frontend && npm run lint &&
+    npm run typecheck && npm test && npm run build`: lint and typecheck
+    clean, 115 tests passed (3 new in `src/layout/AppShell.test.tsx`:
+    follows the OS, cycles and stores the choice, starts from a saved
+    choice), build succeeded with the existing over-500 kB bundle
+    warning.
+-   **Not verified:** a browser run (no flash on reload, the toggle on
+    the mobile menu).

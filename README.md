@@ -284,6 +284,11 @@ Locally, emails are not sent: each one is written to `backend/target/dev-mail/<t
 
 To see the email jobs: `docker compose exec postgres psql -U photospace -c "SELECT email, status, email_status, send_count FROM workspace_invitations ORDER BY created_at DESC LIMIT 5"`.
 
+### Theme toggle: a quick manual check
+
+1. Sign in. The button next to **Sign out** shows a monitor icon: the theme follows the OS. Switch the OS between light and dark: the app follows.
+2. Click it: Light (sun), then Dark (moon), then System again. Reload on Light or Dark: the page opens in that theme without a flash, the sign-in page too.
+
 ### Health endpoints
 
 | Endpoint | Purpose |
