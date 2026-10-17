@@ -2,6 +2,12 @@ import { useState, type FormEvent } from 'react'
 import { createGallery, GALLERY_DOWNLOADS, type GalleryDownloads } from '../api/galleries.ts'
 import { navigate, paths } from '../routing.ts'
 import { noFormError, toFormError, type FormError } from '../ui/formError.ts'
+import { Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { ErrorText, Field } from '../ui/Field.tsx'
+import { Panel } from '../ui/Panel.tsx'
 import { GalleryList } from './GalleryList.tsx'
 import { downloadLabels } from './labels.ts'
 
@@ -12,15 +18,19 @@ export function SessionGalleries({ workspaceId, sessionId, timezone, archived }:
   const [creating, setCreating] = useState(false)
 
   return (
-    <section aria-labelledby="session-galleries-heading">
-      <div className="toolbar">
-        <h4 id="session-galleries-heading">Galleries</h4>
-        {!archived && !creating && (
-          <button type="button" onClick={() => setCreating(true)}>
+    <Panel
+      id="session-galleries-heading"
+      title="Galleries"
+      actions={
+        !archived &&
+        !creating && (
+          <Button type="button" size="sm" variant="outline" onClick={() => setCreating(true)}>
+            <Plus aria-hidden="true" />
             New gallery
-          </button>
-        )}
-      </div>
+          </Button>
+        )
+      }
+    >
       {creating && <NewGalleryForm workspaceId={workspaceId} sessionId={sessionId} onCancel={() => setCreating(false)} />}
       <GalleryList
         workspaceId={workspaceId}
@@ -28,7 +38,7 @@ export function SessionGalleries({ workspaceId, sessionId, timezone, archived }:
         filter={{ sessionId }}
         emptyText="No galleries for this session yet."
       />
-    </section>
+    </Panel>
   )
 }
 
@@ -60,31 +70,32 @@ function NewGalleryForm({
   }
 
   return (
-    <form className="stack" onSubmit={submit} aria-label="New gallery">
-      <label>
-        Title
-        <input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
-        {error.fields.title && <span role="alert">{error.fields.title}</span>}
-      </label>
-      <label>
-        Downloads
-        <select value={downloads} onChange={(e) => setDownloads(e.target.value as GalleryDownloads)}>
+    <form className="grid gap-4 rounded-lg border bg-muted/40 p-4 md:grid-cols-2" onSubmit={submit} aria-label="New gallery">
+      <Field label="Title" error={error.fields.title}>
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
+      </Field>
+      <Field label="Downloads">
+        <NativeSelect className="w-full" value={downloads} onChange={(e) => setDownloads(e.target.value as GalleryDownloads)}>
           {GALLERY_DOWNLOADS.map((d) => (
-            <option key={d} value={d}>
+            <NativeSelectOption key={d} value={d}>
               {downloadLabels[d]}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
-      </label>
-      {error.message && <p role="alert">{error.message}</p>}
-      <span>
-        <button type="submit" disabled={saving}>
+        </NativeSelect>
+      </Field>
+      {error.message && (
+        <div className="md:col-span-2">
+          <ErrorText>{error.message}</ErrorText>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 md:col-span-2">
+        <Button type="submit" disabled={saving}>
           Create gallery
-        </button>{' '}
-        <button type="button" onClick={onCancel}>
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
-        </button>
-      </span>
+        </Button>
+      </div>
     </form>
   )
 }

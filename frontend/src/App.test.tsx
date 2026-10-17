@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.tsx'
 import { clearCookie, headersOf, json, mockApi, noContent, setCookie } from './test/mockApi.ts'
@@ -100,7 +100,9 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Alice Studio' })).toBeTruthy()
     expect(await screen.findByText(/No sessions yet/)).toBeTruthy()
     fireEvent.click(screen.getByRole('link', { name: 'Members' }))
-    expect(await screen.findByText('alice@example.com (owner)')).toBeTruthy()
+    const memberList = await screen.findByRole('list', { name: 'Members' })
+    expect(within(memberList).getByText('alice@example.com')).toBeTruthy()
+    expect(within(memberList).getByText('Owner')).toBeTruthy()
     expect(headersOf(fetch, 'POST', '/api/workspaces')['X-XSRF-TOKEN']).toBe('csrf-token')
     expect(JSON.parse(String(fetch.mock.calls.find(([p, i]) => p === '/api/workspaces' && i?.method === 'POST')?.[1]?.body)))
       .toEqual({ name: 'Alice Studio', timezone: 'Europe/Warsaw' })

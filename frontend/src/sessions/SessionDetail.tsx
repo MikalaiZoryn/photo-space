@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { getClient, summaryOf } from '../api/clients.ts'
+import { SessionContent } from '../content/SessionContent.tsx'
 import { SessionGalleries } from '../galleries/SessionGalleries.tsx'
 import {
   changeSessionStatus,
@@ -13,16 +14,22 @@ import { formatDate, formatSessionTime } from '../time.ts'
 import { toFormError } from '../ui/formError.ts'
 import { LoadError } from '../ui/LoadError.tsx'
 import { useLoad } from '../useLoad.ts'
+import { Archive, ArchiveRestore, Pencil } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ErrorAlert, Loading } from '../ui/Feedback.tsx'
+import { FieldItem, Fields } from '../ui/Fields.tsx'
+import { PageHeader } from '../ui/PageHeader.tsx'
+import { StatusBadge } from '../ui/StatusBadge.tsx'
 import { SessionForm } from './SessionForm.tsx'
 import { SessionPhotos } from './SessionPhotos.tsx'
-import { statusActions, statusLabels } from './status.ts'
+import { statusActions, statusLabels, statusTones } from './status.ts'
 
 type Props = { workspaceId: string; sessionId: string }
 
 export function SessionDetail({ workspaceId, sessionId }: Props) {
   const session = useLoad((signal) => getSession(workspaceId, sessionId, signal), [workspaceId, sessionId])
 
-  if (session.state.kind === 'loading') return <p role="status">Loading session…</p>
+  if (session.state.kind === 'loading') return <Loading>Loading session…</Loading>
   if (session.state.kind === 'error') {
     return <LoadError error={session.state.error} what="session" onRetry={session.reload} />
   }
@@ -32,20 +39,20 @@ export function SessionDetail({ workspaceId, sessionId }: Props) {
 export function EditSession({ workspaceId, timezone, sessionId }: Props & { timezone: string }) {
   const session = useLoad((signal) => getSession(workspaceId, sessionId, signal), [workspaceId, sessionId])
 
-  if (session.state.kind === 'loading') return <p role="status">Loading session…</p>
+  if (session.state.kind === 'loading') return <Loading>Loading session…</Loading>
   if (session.state.kind === 'error') {
     return <LoadError error={session.state.error} what="session" onRetry={session.reload} />
   }
   if (session.state.value.archivedAt) {
     return (
-      <p role="alert">
+      <ErrorAlert>
         This session is archived. Restore it before editing. <a href={paths.session(sessionId)}>Back to session</a>
-      </p>
+      </ErrorAlert>
     )
   }
   return (
     <section aria-labelledby="edit-session-heading">
-      <h3 id="edit-session-heading">Edit session</h3>
+      <PageHeader id="edit-session-heading" title="Edit session" back={{ href: paths.session(sessionId), label: 'Back to session' }} />
       <SessionForm
         workspaceId={workspaceId}
         timezone={timezone}
@@ -72,12 +79,16 @@ export function NewSession({
     [workspaceId, clientId],
   )
 
-  if (client.state.kind === 'loading') return <p role="status">Loading…</p>
+  if (client.state.kind === 'loading') return <Loading>Loading…</Loading>
   if (client.state.kind === 'error') return <LoadError error={client.state.error} what="client" onRetry={client.reload} />
   return (
     <section aria-labelledby="new-session-heading">
-      <h3 id="new-session-heading">New session</h3>
-      <p className="muted">New sessions start as inquiries. Mark one booked once the date is confirmed.</p>
+      <PageHeader
+        id="new-session-heading"
+        title="New session"
+        description="New sessions start as inquiries. Mark one booked once the date is confirmed."
+        back={clientId ? { href: paths.client(clientId), label: 'Back to client' } : { href: paths.sessions(), label: 'All sessions' }}
+      />
       <SessionForm
         workspaceId={workspaceId}
         timezone={timezone}
@@ -124,75 +135,93 @@ function SessionView({
 
   return (
     <section aria-labelledby="session-heading">
-      <p>
-        <a href={paths.sessions()}>← All sessions</a>
-      </p>
-      <div className="toolbar">
-        <h3 id="session-heading">
-          {session.title} {archived && <span className="badge">Archived</span>}
-        </h3>
-        <span>
-          {!archived && (
-            <a className="button" href={paths.sessionEdit(session.id)}>
-              Edit
-            </a>
-          )}{' '}
-          <button type="button" disabled={busy} onClick={toggleArchived}>
-            {archived ? 'Restore' : 'Archive'}
-          </button>
-        </span>
-      </div>
-      {actionError && <p role="alert">{actionError}</p>}
-      {archived && session.archivedAt && (
-        <p className="muted">
-          Archived on {formatDate(session.archivedAt, session.timezone)}. Restore it to edit it or change its status.
-        </p>
-      )}
-      <div className="toolbar filters">
-        <span>
-          Status: <span className={`badge status-${session.status.toLowerCase()}`}>{statusLabels[session.status]}</span>
-        </span>
-        {session.allowedStatuses.length > 0 && (
-          <span>
-            {session.allowedStatuses.map((status) => (
-              <button key={status} type="button" disabled={busy} onClick={() => changeStatus(status)}>
-                {statusActions[status]}
-              </button>
-            ))}
-          </span>
-        )}
-      </div>
-      <dl className="fields">
-        <dt>When</dt>
-        <dd>
-          {formatSessionTime(session.startsAt, session.endsAt, session.timezone) ?? 'Not scheduled'}
-          {session.startsAt && <span className="muted"> ({session.timezone})</span>}
-        </dd>
-        <dt>Client</dt>
-        <dd>
-          {session.client ? (
-            <>
-              <a href={paths.client(session.client.id)}>{session.client.name}</a>
-              {session.client.archived && <span className="badge">Archived</span>}
-            </>
-          ) : (
-            '—'
-          )}
-        </dd>
-        <dt>Type</dt>
-        <dd>{session.sessionType ?? '—'}</dd>
-        <dt>Location</dt>
-        <dd>{session.location ?? '—'}</dd>
-        <dt>Notes</dt>
-        <dd className="notes">{session.notes ?? '—'}</dd>
-      </dl>
-      <SessionPhotos workspaceId={workspaceId} sessionId={session.id} archived={archived} />
-      <SessionGalleries
-        workspaceId={workspaceId}
-        sessionId={session.id}
-        timezone={session.timezone}
-        archived={archived}
+      <PageHeader
+        id="session-heading"
+        title={session.title}
+        back={{ href: paths.sessions(), label: 'All sessions' }}
+        badges={
+          <>
+            <StatusBadge tone={statusTones[session.status]}>{statusLabels[session.status]}</StatusBadge>
+            {archived && <StatusBadge>Archived</StatusBadge>}
+          </>
+        }
+        actions={
+          <>
+            {!archived && (
+              <Button asChild variant="outline">
+                <a href={paths.sessionEdit(session.id)}>
+                  <Pencil aria-hidden="true" />
+                  Edit
+                </a>
+              </Button>
+            )}
+            <Button type="button" variant="outline" disabled={busy} onClick={toggleArchived}>
+              {archived ? <ArchiveRestore aria-hidden="true" /> : <Archive aria-hidden="true" />}
+              {archived ? 'Restore' : 'Archive'}
+            </Button>
+          </>
+        }
       />
+      <div className="space-y-6">
+        {actionError && <ErrorAlert>{actionError}</ErrorAlert>}
+        {archived && session.archivedAt && (
+          <p className="text-sm text-muted-foreground">
+            Archived on {formatDate(session.archivedAt, session.timezone)}. Restore it to edit it or change its status.
+          </p>
+        )}
+        {session.allowedStatuses.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3 shadow-xs sm:px-4">
+            <span className="mr-auto text-sm font-medium text-muted-foreground">Next step</span>
+            {session.allowedStatuses.map((status) => (
+              <Button
+                key={status}
+                type="button"
+                size="sm"
+                variant={status === 'CANCELLED' ? 'destructive' : 'secondary'}
+                disabled={busy}
+                onClick={() => changeStatus(status)}
+              >
+                {statusActions[status]}
+              </Button>
+            ))}
+          </div>
+        )}
+        <Fields>
+          <FieldItem label="When">
+            {formatSessionTime(session.startsAt, session.endsAt, session.timezone) ?? 'Not scheduled'}
+            {session.startsAt && <span className="text-muted-foreground"> ({session.timezone})</span>}
+          </FieldItem>
+          <FieldItem label="Client">
+            {session.client ? (
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <a href={paths.client(session.client.id)}>{session.client.name}</a>
+                {session.client.archived && <StatusBadge>Archived</StatusBadge>}
+              </span>
+            ) : (
+              '—'
+            )}
+          </FieldItem>
+          <FieldItem label="Type">{session.sessionType ?? '—'}</FieldItem>
+          <FieldItem label="Location">{session.location ?? '—'}</FieldItem>
+          <FieldItem label="Notes" wide>
+            <span className="whitespace-pre-wrap">{session.notes ?? '—'}</span>
+          </FieldItem>
+        </Fields>
+        <SessionPhotos workspaceId={workspaceId} sessionId={session.id} archived={archived} />
+        <SessionGalleries
+          workspaceId={workspaceId}
+          sessionId={session.id}
+          timezone={session.timezone}
+          archived={archived}
+        />
+        <SessionContent
+          workspaceId={workspaceId}
+          sessionId={session.id}
+          sessionNotes={session.notes}
+          timezone={session.timezone}
+          archived={archived}
+        />
+      </div>
     </section>
   )
 }

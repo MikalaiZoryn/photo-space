@@ -12,6 +12,13 @@ import { reference } from '../ui/formError.ts'
 import { LoadError } from '../ui/LoadError.tsx'
 import { Pager } from '../ui/Pager.tsx'
 import { useLoad } from '../useLoad.ts'
+import { ImageUp, X } from 'lucide-react'
+import { cn } from 'cn'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { EmptyState, Loading, photoGrid } from '../ui/Feedback.tsx'
+import { Panel } from '../ui/Panel.tsx'
+import { PhotoFigure, PhotoImage } from '../ui/Photo.tsx'
+import { StatusBadge, type Tone } from '../ui/StatusBadge.tsx'
 
 const PAGE_SIZE = 100
 /** How often the list refreshes while photos are processing. */
@@ -92,14 +99,16 @@ export function SessionPhotos({ workspaceId, sessionId, archived }: Props) {
   }
 
   return (
-    <section aria-labelledby="photos-heading">
-      <div className="toolbar">
-        <h4 id="photos-heading">Photos</h4>
-        {!archived && (
-          <label className="button">
+    <Panel
+      id="photos-heading"
+      title="Photos"
+      actions={
+        !archived && (
+          <label className={cn(buttonVariants({ size: 'sm' }), 'focus-within:ring-3 focus-within:ring-ring/50')}>
+            <ImageUp aria-hidden="true" />
             Upload photos
             <input
-              className="visually-hidden"
+              className="sr-only"
               type="file"
               multiple
               accept={ACCEPTED_TYPES.join(',')}
@@ -110,43 +119,45 @@ export function SessionPhotos({ workspaceId, sessionId, archived }: Props) {
               }}
             />
           </label>
-        )}
-      </div>
-      {archived && <p className="muted">Restore the session to upload photos.</p>}
+        )
+      }
+    >
+      {archived && <p className="text-sm text-muted-foreground">Restore the session to upload photos.</p>}
       {uploads.length > 0 && (
-        <ul aria-label="Uploads" className="uploads">
+        <ul aria-label="Uploads" className="divide-y rounded-lg border text-sm">
           {uploads.map((upload) => (
-            <li key={upload.key}>
-              {upload.name}:{' '}
+            <li key={upload.key} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2">
+              <span className="min-w-0 truncate font-medium">{upload.name}:</span>{' '}
               {upload.state === 'failed' ? (
                 <>
-                  <span role="alert">{upload.message}</span>{' '}
-                  <button type="button" onClick={() => update(upload.key, null)}>
+                  <span role="alert" className="text-destructive">
+                    {upload.message}
+                  </span>{' '}
+                  <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={() => update(upload.key, null)}>
+                    <X aria-hidden="true" />
                     Dismiss
-                  </button>
+                  </Button>
                 </>
-              ) : upload.state === 'uploading' ? (
-                'uploading…'
               ) : (
-                'waiting…'
+                <span className="text-muted-foreground">{upload.state === 'uploading' ? 'uploading…' : 'waiting…'}</span>
               )}
             </li>
           ))}
         </ul>
       )}
       <PhotoList photos={photos} onPage={setPageNumber} />
-    </section>
+    </Panel>
   )
 }
 
 function PhotoList({ photos, onPage }: { photos: PhotosLoad; onPage: (page: number) => void }) {
-  if (photos.state.kind === 'loading') return <p role="status">Loading photos…</p>
+  if (photos.state.kind === 'loading') return <Loading>Loading photos…</Loading>
   if (photos.state.kind === 'error') return <LoadError error={photos.state.error} what="photo list" onRetry={photos.reload} />
   const page = photos.state.value
-  if (page.totalItems === 0) return <p className="muted">No photos yet. JPEG or PNG, up to 100 MB each.</p>
+  if (page.totalItems === 0) return <EmptyState>No photos yet. JPEG or PNG, up to 100 MB each.</EmptyState>
   return (
     <>
-      <ul className="photo-grid" aria-label="Session photos">
+      <ul className={photoGrid} aria-label="Session photos">
         {page.items.map((photo) => (
           <li key={photo.id}>
             <PhotoTile photo={photo} />
@@ -158,15 +169,22 @@ function PhotoList({ photos, onPage }: { photos: PhotosLoad; onPage: (page: numb
   )
 }
 
+const statusTones: Record<PhotoAsset['status'], Tone> = {
+  PENDING_UPLOAD: 'neutral',
+  PROCESSING: 'info',
+  READY: 'success',
+  REJECTED: 'danger',
+  FAILED: 'danger',
+}
+
 function PhotoTile({ photo }: { photo: PhotoAsset }) {
   if (photo.status === 'READY' && photo.thumbnailUrl) {
     return (
-      <figure>
-        <a href={photo.previewUrl ?? photo.thumbnailUrl} target="_blank" rel="noreferrer">
-          <img src={photo.thumbnailUrl} alt={photo.originalFilename} loading="lazy" />
+      <PhotoFigure caption={photo.originalFilename}>
+        <a href={photo.previewUrl ?? photo.thumbnailUrl} target="_blank" rel="noreferrer" className="block rounded-none">
+          <PhotoImage src={photo.thumbnailUrl} alt={photo.originalFilename} />
         </a>
-        <figcaption>{photo.originalFilename}</figcaption>
-      </figure>
+      </PhotoFigure>
     )
   }
   const label = {
@@ -177,11 +195,12 @@ function PhotoTile({ photo }: { photo: PhotoAsset }) {
     FAILED: 'Failed',
   }[photo.status]
   return (
-    <figure className="photo-placeholder">
-      <span className={`badge photo-${photo.status.toLowerCase()}`}>{label}</span>
-      {photo.failureReason && <span>{photo.failureReason}</span>}
-      <figcaption>{photo.originalFilename}</figcaption>
-    </figure>
+    <PhotoFigure caption={photo.originalFilename}>
+      <div className="flex aspect-square flex-col items-start justify-center gap-2 bg-muted/60 p-3 text-xs">
+        <StatusBadge tone={statusTones[photo.status]}>{label}</StatusBadge>
+        {photo.failureReason && <span className="text-tone-danger">{photo.failureReason}</span>}
+      </div>
+    </PhotoFigure>
   )
 }
 

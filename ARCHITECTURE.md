@@ -191,11 +191,21 @@ Suggested tables (fields are indicative; refine during implementation):
     agent).
 -   `tasks`: `id`, `workspace_id`, optional client/session links, title,
     description, due date, status, assignee, source, timestamps.
--   `content_batches`: `id`, `workspace_id`, optional session ID, input
-    metadata, status, created timestamp.
--   `content_drafts`: `id`, `workspace_id`, batch ID, format,
-    text/content payload, status, version, model/provider metadata,
-    timestamps.
+-   `brand_profiles`: one per workspace: voice, audience, preferences,
+    words to avoid, version. (Implemented in Milestone 6; see D16.)
+-   `content_batches`: `id`, `workspace_id`, `session_id` (composite
+    foreign key), status (`PENDING`, `SUCCEEDED`, `FAILED`), the input
+    (session type snapshot, notes, caption count, hashtag and call-to-
+    action options), run count, safe failure reason, provider, model,
+    prompt version, token counts, carousel rationale, story ideas,
+    warnings, creating user, timestamps. `content_batch_assets` holds
+    its photos in selection order and the suggested carousel position,
+    with composite foreign keys to the session's photos.
+-   `content_drafts`: `id`, `workspace_id`, batch ID, position, status
+    (`DRAFT`, `APPROVED`), current version, approved version, approver,
+    approval time. `content_draft_versions` holds every version's
+    caption, call to action, and hashtags, with its source (`GENERATED`
+    or `EDITED`) and editor. (Implemented in Milestone 6; see D16.)
 -   `integration_connections`: `id`, `workspace_id`, provider, encrypted
     token reference, granted scopes, connection status, sync cursor,
     timestamps.
@@ -348,6 +358,13 @@ policies. - AI can propose actions; deterministic application code
 authorizes and executes them. - Do not send photos or personal data to a
 provider without an explicit product/privacy decision and appropriate
 disclosure.
+
+Milestone 6 implements this as `ContentGenerationProvider` in the
+`content` module, with a mock provider (default) and an Anthropic
+adapter. D16 records what is sent to the provider (selected photo
+previews without metadata, the notes the photographer types, the
+session type, and the brand profile; never client details), the
+validation rules, retries, and versioned, human-approved drafts.
 
 ## 11. Gmail and Google Calendar integrations
 

@@ -6,7 +6,15 @@ import { toFormError } from '../ui/formError.ts'
 import { LoadError } from '../ui/LoadError.tsx'
 import { Pager } from '../ui/Pager.tsx'
 import { useLoad } from '../useLoad.ts'
-import { linkStateLabels } from './labels.ts'
+import { Check, Copy, Link2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { EmptyState, ErrorAlert, Loading } from '../ui/Feedback.tsx'
+import { Panel } from '../ui/Panel.tsx'
+import { RecordList } from '../ui/RecordList.tsx'
+import { StatusBadge } from '../ui/StatusBadge.tsx'
+import { linkStateLabels, linkStateTones } from './labels.ts'
 
 const VALIDITY_DAYS = [7, 30, 90, 365]
 
@@ -59,77 +67,97 @@ export function ShareLinks({ workspaceId, timezone, gallery }: Props) {
   }
 
   return (
-    <section aria-labelledby="links-heading">
-      <h4 id="links-heading">Share links</h4>
-      {!archived && (
-        <div className="toolbar filters">
-          <label>
-            Valid for{' '}
-            <select value={validDays} onChange={(e) => setValidDays(Number(e.target.value))}>
-              {VALIDITY_DAYS.map((days) => (
-                <option key={days} value={days}>
-                  {days} days
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" disabled={busy} onClick={create}>
-            Create link
-          </button>
-        </div>
-      )}
-      {error && <p role="alert">{error}</p>}
+    <Panel
+      id="links-heading"
+      title="Share links"
+      actions={
+        !archived && (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 text-sm">
+              Valid for{' '}
+              <NativeSelect size="sm" value={validDays} onChange={(e) => setValidDays(Number(e.target.value))}>
+                {VALIDITY_DAYS.map((days) => (
+                  <NativeSelectOption key={days} value={days}>
+                    {days} days
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </label>
+            <Button type="button" size="sm" disabled={busy} onClick={create}>
+              <Link2 aria-hidden="true" />
+              Create link
+            </Button>
+          </div>
+        )
+      }
+    >
+      {error && <ErrorAlert>{error}</ErrorAlert>}
       {newUrl && (
-        <div className="new-link" role="status">
-          <p>Copy this link now and send it to your client. It is not shown again; create a new link if it gets lost.</p>
-          <span className="toolbar">
-            <input aria-label="New share link" value={newUrl} readOnly onFocus={(e) => e.target.select()} />
-            <button type="button" onClick={() => copy(newUrl)}>
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-            <button type="button" onClick={() => setNewUrl(null)}>
-              Done
-            </button>
-          </span>
+        <div className="space-y-3 rounded-lg border border-tone-success/30 bg-tone-success-bg p-4" role="status">
+          <p className="text-sm text-tone-success">
+            Copy this link now and send it to your client. It is not shown again; create a new link if it gets lost.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              aria-label="New share link"
+              className="flex-1 bg-card font-mono text-xs"
+              value={newUrl}
+              readOnly
+              onFocus={(e) => e.target.select()}
+            />
+            <div className="flex gap-2">
+              <Button type="button" onClick={() => copy(newUrl)}>
+                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setNewUrl(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
         </div>
       )}
-      {links.state.kind === 'loading' && <p role="status">Loading links…</p>}
+      {links.state.kind === 'loading' && <Loading>Loading links…</Loading>}
       {links.state.kind === 'error' && <LoadError error={links.state.error} what="links" onRetry={links.reload} />}
       {links.state.kind === 'loaded' &&
         (links.state.value.totalItems === 0 ? (
-          <p className="muted">No links yet.</p>
+          <EmptyState>No links yet.</EmptyState>
         ) : (
           <>
-            <ul className="records" aria-label="Share links">
+            <RecordList label="Share links">
               {links.state.value.items.map((link) => (
-                <li key={link.id}>
-                  <span className={`badge link-${link.state.toLowerCase()}`}>{linkStateLabels[link.state]}</span>
-                  <span>
-                    Created {formatDate(link.createdAt, timezone)} ·{' '}
-                    {link.state === 'REVOKED' && link.revokedAt
-                      ? `revoked ${formatDate(link.revokedAt, timezone)}`
-                      : `${link.state === 'EXPIRED' ? 'expired' : 'expires'} ${formatDate(link.expiresAt, timezone)}`}
-                  </span>
-                  <span className="muted">
-                    {link.views} {link.views === 1 ? 'view' : 'views'} · {link.downloads}{' '}
-                    {link.downloads === 1 ? 'download' : 'downloads'}
-                    {link.lastAccessedAt && ` · last used ${formatDate(link.lastAccessedAt, timezone)}`}
-                  </span>
+                <li key={link.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                  <StatusBadge tone={linkStateTones[link.state]}>{linkStateLabels[link.state]}</StatusBadge>
+                  <div className="min-w-0 flex-1 text-sm">
+                    <p>
+                      Created {formatDate(link.createdAt, timezone)} ·{' '}
+                      {link.state === 'REVOKED' && link.revokedAt
+                        ? `revoked ${formatDate(link.revokedAt, timezone)}`
+                        : `${link.state === 'EXPIRED' ? 'expired' : 'expires'} ${formatDate(link.expiresAt, timezone)}`}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {link.views} {link.views === 1 ? 'view' : 'views'} · {link.downloads}{' '}
+                      {link.downloads === 1 ? 'download' : 'downloads'}
+                      {link.lastAccessedAt && ` · last used ${formatDate(link.lastAccessedAt, timezone)}`}
+                    </p>
+                  </div>
                   {link.state === 'ACTIVE' && (
-                    <button
+                    <Button
                       type="button"
+                      size="sm"
+                      variant="destructive"
                       disabled={busy}
                       onClick={() => run(() => revokeLink(workspaceId, gallery.id, link.id).then(() => {}), 'revoke the link')}
                     >
                       Revoke
-                    </button>
+                    </Button>
                   )}
                 </li>
               ))}
-            </ul>
+            </RecordList>
             <Pager page={links.state.value} onPage={setPageNumber} />
           </>
         ))}
-    </section>
+    </Panel>
   )
 }

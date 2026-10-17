@@ -1,21 +1,39 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { CalendarDays, Images, Plus, Sparkles, UserCog, Users } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { ClientDetail, EditClient, NewClient } from './clients/ClientDetail.tsx'
 import { ClientsPage } from './clients/ClientsPage.tsx'
+import { BatchPage } from './content/BatchPage.tsx'
+import { ContentPage } from './content/ContentPage.tsx'
 import { CreateWorkspaceForm } from './CreateWorkspaceForm.tsx'
 import { GalleriesPage } from './galleries/GalleriesPage.tsx'
 import { GalleryPage } from './galleries/GalleryPage.tsx'
+import { AppShell, type NavItem } from './layout/AppShell.tsx'
+import { CenteredLayout } from './layout/CenteredLayout.tsx'
 import { listMembers, listWorkspaces, type Workspace } from './api/workspaces.ts'
 import { navigate, paths, useRoute, type Route } from './routing.ts'
 import { EditSession, NewSession, SessionDetail } from './sessions/SessionDetail.tsx'
 import { SessionsPage } from './sessions/SessionsPage.tsx'
+import { ErrorAlert, Loading } from './ui/Feedback.tsx'
 import { LoadError } from './ui/LoadError.tsx'
+import { PageHeader } from './ui/PageHeader.tsx'
+import { Initials, RecordList, RecordRow } from './ui/RecordList.tsx'
+import { StatusBadge } from './ui/StatusBadge.tsx'
 import { useLoad, type Loadable } from './useLoad.ts'
 
 // Only remembers which workspace was last open in this browser. Access is always checked by the server.
 const SELECTED_KEY = 'photospace.selectedWorkspace'
 
 /** Workspace onboarding (create the first one) and selection between the user's workspaces. */
-export function Workspaces() {
+type Props = {
+  userName: string
+  onSignOut: () => void
+  /** Shown above the page, e.g. a failed sign-out. */
+  notice?: ReactNode
+}
+
+export function Workspaces({ userName, onSignOut, notice }: Props) {
   const [workspaces, setWorkspaces] = useState<Loadable<Workspace[]>>({ kind: 'loading' })
   const [selectedId, setSelectedId] = useState<string | null>(readSelected)
   const [creating, setCreating] = useState(false)
@@ -49,75 +67,139 @@ export function Workspaces() {
     switchTo(workspace.id)
   }
 
-  if (workspaces.kind === 'loading') return <p role="status">Loading workspaces…</p>
-  if (workspaces.kind === 'error') return <p role="alert">Could not load your workspaces.</p>
+  const shell = (children: ReactNode, rest: Partial<Parameters<typeof AppShell>[0]> = {}) => (
+    <AppShell userName={userName} onSignOut={onSignOut} {...rest}>
+      {notice && <div className="mb-6">{notice}</div>}
+      {children}
+    </AppShell>
+  )
+
+  if (workspaces.kind === 'loading') {
+    return (
+      <CenteredLayout status={false}>
+        <Loading>Loading workspaces…</Loading>
+      </CenteredLayout>
+    )
+  }
+  if (workspaces.kind === 'error') {
+    return (
+      <CenteredLayout>
+        <div className="space-y-4">
+          {notice}
+          <ErrorAlert>Could not load your workspaces.</ErrorAlert>
+          <Button type="button" variant="outline" onClick={onSignOut}>
+            Sign out
+          </Button>
+        </div>
+      </CenteredLayout>
+    )
+  }
 
   if (workspaces.value.length === 0) {
     return (
-      <section aria-labelledby="onboarding-heading">
-        <h2 id="onboarding-heading">Create your workspace</h2>
-        <p>A workspace holds one photography business: its clients, sessions, photos, and galleries.</p>
-        <CreateWorkspaceForm onCreated={created} />
-      </section>
+      <CenteredLayout>
+        {notice && <div className="mb-6">{notice}</div>}
+        <section aria-labelledby="onboarding-heading" className="space-y-6 rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
+          <div className="space-y-1.5">
+            <h2 id="onboarding-heading" className="text-2xl font-semibold">
+              Create your workspace
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              A workspace holds one photography business: its clients, sessions, photos, and galleries.
+            </p>
+          </div>
+          <CreateWorkspaceForm onCreated={created} />
+          <div className="flex items-center justify-between gap-3 border-t pt-4 text-sm text-muted-foreground">
+            <span className="truncate">Signed in as {userName}</span>
+            <Button type="button" variant="ghost" size="sm" onClick={onSignOut}>
+              Sign out
+            </Button>
+          </div>
+        </section>
+      </CenteredLayout>
     )
   }
 
   const selected = workspaces.value.find((w) => w.id === selectedId) ?? workspaces.value[0]
 
+  const switcher = (
+    <div className="grid gap-2">
+      <label className="grid gap-1.5 px-1 text-xs font-medium text-muted-foreground">
+        Workspace
+        <NativeSelect className="w-full" value={selected.id} onChange={(e) => switchTo(e.target.value)}>
+          {workspaces.value.map((w) => (
+            <NativeSelectOption key={w.id} value={w.id}>
+              {w.name}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </label>
+      {!creating && (
+        <Button type="button" variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => setCreating(true)}>
+          <Plus aria-hidden="true" />
+          New workspace
+        </Button>
+      )}
+    </div>
+  )
+
   return (
-    <>
-      <div className="toolbar">
-        <label>
-          Workspace{' '}
-          <select value={selected.id} onChange={(e) => switchTo(e.target.value)}>
-            {workspaces.value.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!creating && (
-          <button type="button" onClick={() => setCreating(true)}>
-            New workspace
-          </button>
-        )}
-      </div>
-      {creating && <CreateWorkspaceForm onCreated={created} onCancel={() => setCreating(false)} />}
-      <WorkspaceHome key={selected.id} workspace={selected} />
-    </>
+    <WorkspaceHome
+      key={selected.id}
+      workspace={selected}
+      render={(nav, children) =>
+        shell(
+          <>
+            {creating && (
+              <section aria-labelledby="new-workspace-heading" className="mb-8 max-w-lg space-y-4 rounded-xl border bg-card p-4 shadow-xs sm:p-6">
+                <h3 id="new-workspace-heading" className="text-base font-semibold">
+                  New workspace
+                </h3>
+                <CreateWorkspaceForm onCreated={created} onCancel={() => setCreating(false)} />
+              </section>
+            )}
+            {children}
+          </>,
+          { switcher, nav, context: selected.name },
+        )
+      }
+    />
   )
 }
 
-function WorkspaceHome({ workspace }: { workspace: Workspace }) {
+function WorkspaceHome({
+  workspace,
+  render,
+}: {
+  workspace: Workspace
+  render: (nav: NavItem[], children: ReactNode) => ReactNode
+}) {
   const route = useRoute()
   const section = route.page.startsWith('client')
     ? 'clients'
     : route.page.startsWith('galler')
       ? 'galleries'
-      : route.page === 'members'
+      : route.page.startsWith('content')
+        ? 'content'
+        : route.page === 'members'
         ? 'members'
         : 'sessions'
+  const nav: NavItem[] = [
+    { href: paths.sessions(), label: 'Sessions', icon: CalendarDays, current: section === 'sessions' },
+    { href: paths.clients(), label: 'Clients', icon: Users, current: section === 'clients' },
+    { href: paths.galleries(), label: 'Galleries', icon: Images, current: section === 'galleries' },
+    { href: paths.content(), label: 'Content', icon: Sparkles, current: section === 'content' },
+    { href: paths.members(), label: 'Members', icon: UserCog, current: section === 'members' },
+  ]
 
-  return (
+  return render(
+    nav,
     <section aria-labelledby="workspace-heading">
-      <h2 id="workspace-heading">{workspace.name}</h2>
-      <nav aria-label="Workspace sections" className="tabs">
-        <a href={paths.sessions()} aria-current={section === 'sessions' ? 'page' : undefined}>
-          Sessions
-        </a>
-        <a href={paths.clients()} aria-current={section === 'clients' ? 'page' : undefined}>
-          Clients
-        </a>
-        <a href={paths.galleries()} aria-current={section === 'galleries' ? 'page' : undefined}>
-          Galleries
-        </a>
-        <a href={paths.members()} aria-current={section === 'members' ? 'page' : undefined}>
-          Members
-        </a>
-      </nav>
+      <h2 id="workspace-heading" className="sr-only">
+        {workspace.name}
+      </h2>
       <RoutedPage workspace={workspace} route={route} />
-    </section>
+    </section>,
   )
 }
 
@@ -144,6 +226,10 @@ function RoutedPage({ workspace, route }: { workspace: Workspace; route: Route }
       return <GalleriesPage workspaceId={workspaceId} timezone={timezone} />
     case 'gallery':
       return <GalleryPage key={route.id} workspaceId={workspaceId} galleryId={route.id} timezone={timezone} />
+    case 'content':
+      return <ContentPage workspaceId={workspaceId} timezone={timezone} />
+    case 'contentBatch':
+      return <BatchPage key={route.id} workspaceId={workspaceId} batchId={route.id} timezone={timezone} />
     case 'members':
       return <MembersPage workspace={workspace} />
   }
@@ -154,22 +240,26 @@ function MembersPage({ workspace }: { workspace: Workspace }) {
 
   return (
     <section aria-labelledby="members-heading">
-      <h3 id="members-heading">Members</h3>
-      <p>
-        Time zone {workspace.timezone} · Your role: {workspace.role.toLowerCase()}
-      </p>
-      {members.state.kind === 'loading' && <p role="status">Loading members…</p>}
+      <PageHeader
+        id="members-heading"
+        title="Members"
+        description={`Time zone ${workspace.timezone} · Your role: ${workspace.role.toLowerCase()}`}
+      />
+      {members.state.kind === 'loading' && <Loading>Loading members…</Loading>}
       {members.state.kind === 'error' && (
         <LoadError error={members.state.error} what="members" onRetry={members.reload} />
       )}
       {members.state.kind === 'loaded' && (
-        <ul>
+        <RecordList label="Members">
           {members.state.value.map((m) => (
-            <li key={m.userId}>
-              {m.displayName} ({m.role.toLowerCase()})
-            </li>
+            <RecordRow
+              key={m.userId}
+              leading={<Initials name={m.displayName} />}
+              title={m.displayName}
+              trailing={<StatusBadge tone={m.role === 'OWNER' ? 'info' : 'neutral'}>{m.role === 'OWNER' ? 'Owner' : 'Member'}</StatusBadge>}
+            />
           ))}
-        </ul>
+        </RecordList>
       )}
     </section>
   )

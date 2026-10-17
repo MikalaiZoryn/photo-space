@@ -953,9 +953,148 @@ sequentially and keep each change small enough to review and test.
     -   Photo deletion is not built. The retention rules for it are
         documented in ARCHITECTURE §8.
 
-### Milestone 6: next
+### UI styling pass: done (2026-10-16)
 
-AI content studio, first vertical slice: a brand profile, a
-provider-neutral generation interface (configurable and mockable),
-caption drafts from selected photos and session notes, versioned
-editable drafts, and explicit approval before anything is published.
+Not a numbered milestone: a cross-cutting restyle before Milestone 6,
+with no behavior, API, or routing changes. Decision: D15.
+
+-   Tailwind CSS v4 and shadcn/ui (button, input, textarea,
+    native-select, badge, alert, sheet) with HoneyBook-inspired
+    tokens in `frontend/src/index.css`, OS-driven dark mode, and
+    self-hosted Inter.
+-   Signed-in layout `src/layout/AppShell.tsx`: sidebar with the
+    workspace switcher, section navigation, and sign-out from `lg` up;
+    a top bar with a slide-in menu below. A skip-to-content link, and
+    the system status in the footer.
+-   Centered card layout for sign-in, first workspace, and loading.
+    Visitor gallery page with its own header and a full-width photo
+    grid.
+-   Shared pieces in `src/ui/`: page header, card panels, divided
+    record lists with whole-row links, labelled fields, status pills
+    with tones, loading/error/empty states, and photo tiles.
+-   Tests: `src/test/workspace.tsx` passes the new `Workspaces` props,
+    and the onboarding test in `App.test.tsx` checks the members list
+    (name, "Owner" badge) instead of the old "name (owner)" text.
+-   Verified: `cd frontend && npm run lint && npm run typecheck &&
+    npm test && npm run build`: 60 tests passed, lint clean, build
+    succeeded (JS about 116 kB gzipped, was about 81 kB).
+-   Not verified: no browser or backend was available where this was
+    built, so the layouts were not checked visually. Worth a manual
+    pass at 375, 768, and 1280 px wide, in light and dark: sign-in,
+    first workspace, sessions, clients, galleries, a session with
+    photos, a gallery, and a visitor link.
+
+### Milestone 6: done (2026-10-16)
+
+-   **Schema:** `V7__content_studio.sql` adds `brand_profiles` (one per
+    workspace, versioned), `content_batches` (input, status, run count,
+    safe failure reason, provider, model, prompt version, token counts,
+    suggestions), `content_batch_assets` (selection order and carousel
+    position, composite foreign keys to the session's photos),
+    `content_drafts` (status, current version, approved version,
+    approver, time), and `content_draft_versions` (immutable, with
+    source `GENERATED` or `EDITED` and editor).
+-   **Provider boundary** (`content` module, D16):
+    `ContentGenerationProvider` with typed `GenerationRequest` /
+    `GenerationResult` and a provider-neutral
+    `ContentGenerationException` kind. `app.content.provider` picks
+    `mock` (default; deterministic, no network) or `anthropic`
+    (`content.anthropic`, official Java SDK 2.65.0, `claude-opus-5-5`,
+    effort `medium`, JSON schema output, server-side refusal
+    fallbacks, 120 s timeout). SDK types stay in the adapter. The
+    backend refuses to start with `anthropic` and no key.
+-   **Generation flow:** `POST …/content/batches` validates the session
+    (not archived) and 1–10 ready photos of it, stores the batch and
+    queues `generate-content` in one transaction. The job sends the
+    selected photos' metadata-free previews, the typed notes, the
+    session type, and the brand profile (never client details, title,
+    or location), validates the answer (`ContentValidator`), and stores
+    drafts in the transaction that ends the batch. Temporary failures
+    (rate limits, timeouts, unusable answers) retry with the job
+    backoff and show the last problem; permanent ones (refusal,
+    rejected request, bad credentials) fail at once. Users can retry a
+    failed batch or regenerate any batch as a new one.
+-   **Safeguards:** a versioned prompt (`instagram-drafts-v1`) with the
+    photographer's text escaped inside tags and marked as data;
+    instructions not to invent names, places, dates, prices, or
+    promises; model warnings for missing information; deterministic
+    review hints (`ContentChecks`) for handles, links, emails, phone
+    numbers, and prices not in the notes or brand profile; and
+    approval of an exact version, reset by any later edit. Nothing is
+    published: the UI copies only approved, saved drafts.
+-   **Frontend:** a **Content** tab (brand profile and all batches), an
+    **Instagram drafts** panel on each session (photo picker in pick
+    order, notes prefilled from the session, caption count, hashtag and
+    call-to-action options, and a disclosure of what is sent), and a
+    batch page that polls while generating, shows failures with Retry,
+    and lists drafts with edit, save, approve, withdraw, copy, history
+    (with "Use this text"), review hints, warnings, the suggested
+    carousel order, and Story ideas. No new frontend dependencies.
+-   **Docs:** D16; ARCHITECTURE §6 (content tables) and §10; README
+    (API, content rules, manual check); `.env.example`.
+-   **Verified locally on 2026-10-16:**
+    -   `cd backend && ./mvnw verify`: 58 unit tests and 96 integration
+        tests passed.
+        -   `ContentIT` (8): what the provider receives (previews in
+            selection order, brand profile, session type, typed notes;
+            no client name, email, phone, title, location, or session
+            notes); drafts persist; versioned edits, stale-version 409s,
+            approval of the reviewed version only, re-approval after an
+            edit, idempotent saves and approvals, history; field
+            validation; review hints against the brand profile;
+            temporary failure retried, permanent failure not retried,
+            manual retry (`run` 2), exhausted retries keep the last
+            problem; regenerate; request validation (empty, duplicate,
+            11 photos, other session's, not ready, unknown session,
+            caption count, notes length, missing options, archived
+            session); brand profile locking and limits; cross-workspace
+            denial on every content route through both workspace paths,
+            with no side effects.
+        -   `AnthropicContentProviderTest` (12) against a local stub of
+            the Messages API: the request (model, effort, schema,
+            fallbacks, image blocks with the exact bytes, escaped data,
+            API key header), parsing and token counts, and the mapping
+            of 429, 401, 403, 404, 400, 413, 500, 529, refusal,
+            `max_tokens`, malformed text, and a timeout, without the
+            provider's message.
+        -   `ContentValidatorTest` (6), `ContentChecksTest` (2),
+            `ContentPromptTest` (1). `BackendApplicationIT` expects V7.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 70 tests passed (10 new in `Content.test.tsx`),
+        lint clean, build succeeded (JS about 122 kB gzipped).
+    -   Browser run in Chrome (Compose services, `spring-boot:test-run
+        -Dspring-boot.run.profiles=compose-db`, Vite on :5173): V7
+        migrated on the existing database. Saved a brand profile;
+        created drafts from two photos of a session (notes prefilled,
+        pick order shown, mock disclosure); the batch page went from
+        "Writing drafts…" to three drafts by polling. Edited a draft
+        (version 2, review hint for "@anna.nowak"), approved it, copied
+        it, saw both versions in History, reloaded (state kept), edited
+        it again (back to draft, version 3), and regenerated (new batch,
+        same photos and notes). Restarted with `CONTENT_PROVIDER=
+        anthropic` and a dummy key: the form showed the real-provider
+        disclosure, the real Claude API answered 401, and the batch
+        failed with "AI generation is not set up correctly…" at once.
+        Restarted with the mock provider and **Retry** produced drafts
+        (`run` 2). A session of another workspace showed "not found",
+        and a second dev user got 404 for the batch, brand profile, and
+        list. No browser console errors. The backend log had no key,
+        notes, or file names.
+-   **Known gaps:**
+    -   No real Claude generation was run (no API key here). Only the
+        401 path reached the real API. Caption quality, latency, and
+        token cost with real photos are unverified.
+    -   Batches and drafts cannot be deleted or archived yet, and there
+        is no per-workspace usage limit or cost report beyond stored
+        token counts.
+    -   The job log says "succeeded" for a batch that ended in a
+        permanent failure (the job ran to completion; the batch
+        failed), as with rejected uploads.
+    -   Review hints use simple patterns: they can miss invented
+        details (names, dates) and flag harmless numbers.
+    -   No audit log of approvals yet beyond `approved_by` and
+        `approved_at` (the `audit` module is not built).
+
+### Milestone 7: next
+
+Tasks and deterministic workflows.

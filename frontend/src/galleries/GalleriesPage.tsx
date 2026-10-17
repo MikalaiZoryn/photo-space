@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { CheckboxField } from '../ui/Field.tsx'
+import { PageHeader } from '../ui/PageHeader.tsx'
+import { FilterBar } from '../ui/RecordList.tsx'
 import { GalleryList } from './GalleryList.tsx'
 
 export function GalleriesPage({ workspaceId, timezone }: { workspaceId: string; timezone: string }) {
@@ -6,13 +9,14 @@ export function GalleriesPage({ workspaceId, timezone }: { workspaceId: string; 
 
   return (
     <section aria-labelledby="galleries-heading">
-      <h3 id="galleries-heading">Galleries</h3>
-      <div className="toolbar filters">
-        <label>
-          <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Show archived
-        </label>
-        <span className="muted">To create a gallery, open the session its photos belong to.</span>
-      </div>
+      <PageHeader
+        id="galleries-heading"
+        title="Galleries"
+        description="To create a gallery, open the session its photos belong to."
+      />
+      <FilterBar>
+        <CheckboxField label="Show archived" checked={archived} onChange={setArchived} />
+      </FilterBar>
       <GalleryList
         key={String(archived)}
         workspaceId={workspaceId}

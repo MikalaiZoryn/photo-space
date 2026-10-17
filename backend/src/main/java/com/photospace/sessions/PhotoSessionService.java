@@ -201,7 +201,7 @@ public class PhotoSessionService {
     @Transactional(readOnly = true)
     public Optional<SessionSummary> findSummary(WorkspaceContext workspace, UUID sessionId) {
         return find(workspace, sessionId, false)
-                .map(row -> new SessionSummary(row.id(), row.title(), row.archivedAt() != null));
+                .map(row -> new SessionSummary(row.id(), row.title(), row.sessionType(), row.archivedAt() != null));
     }
 
     /**
@@ -320,7 +320,7 @@ public class PhotoSessionService {
             Instant updatedAt) {}
 
     /** What other modules need to know about a session. */
-    public record SessionSummary(UUID id, String title, boolean archived) {}
+    public record SessionSummary(UUID id, String title, String sessionType, boolean archived) {}
 
     /**
      * A session as the API returns it. {@code startsAt}/{@code endsAt} are UTC instants; {@code startLocal}/

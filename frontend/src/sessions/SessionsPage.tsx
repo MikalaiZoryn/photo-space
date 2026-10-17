@@ -1,6 +1,12 @@
 import { useState } from 'react'
+import { Plus } from 'lucide-react'
 import { SESSION_STATUSES, type SessionStatus } from '../api/sessions.ts'
 import { paths } from '../routing.ts'
+import { Button } from '@/components/ui/button'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { CheckboxField } from '../ui/Field.tsx'
+import { PageHeader } from '../ui/PageHeader.tsx'
+import { FilterBar } from '../ui/RecordList.tsx'
 import { SessionList } from './SessionList.tsx'
 import { statusLabels } from './status.ts'
 
@@ -11,29 +17,34 @@ export function SessionsPage({ workspaceId, timezone }: { workspaceId: string; t
 
   return (
     <section aria-labelledby="sessions-heading">
-      <div className="toolbar">
-        <h3 id="sessions-heading">Sessions</h3>
-        <a className="button" href={paths.sessionNew()}>
-          New session
-        </a>
-      </div>
-      <div className="toolbar filters">
-        <label>
+      <PageHeader
+        id="sessions-heading"
+        title="Sessions"
+        description="Inquiries, bookings, and deliveries, newest first."
+        actions={
+          <Button asChild>
+            <a href={paths.sessionNew()}>
+              <Plus aria-hidden="true" />
+              New session
+            </a>
+          </Button>
+        }
+      />
+      <FilterBar>
+        <label className="inline-flex items-center gap-2 text-sm">
           Status{' '}
-          <select value={status} onChange={(e) => setStatus(e.target.value as SessionStatus | '')}>
-            <option value="">All statuses</option>
+          <NativeSelect className="bg-card" value={status} onChange={(e) => setStatus(e.target.value as SessionStatus | '')}>
+            <NativeSelectOption value="">All statuses</NativeSelectOption>
             {SESSION_STATUSES.map((s) => (
-              <option key={s} value={s}>
+              <NativeSelectOption key={s} value={s}>
                 {statusLabels[s]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </label>
-        <label>
-          <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} /> Show archived
-        </label>
-        <span className="muted">Times in {timezone}</span>
-      </div>
+        <CheckboxField label="Show archived" checked={archived} onChange={setArchived} />
+        <span className="text-sm text-muted-foreground sm:ml-auto">Times in {timezone}</span>
+      </FilterBar>
       <SessionList
         key={`${status}|${archived}`}
         workspaceId={workspaceId}

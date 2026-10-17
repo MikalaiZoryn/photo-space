@@ -1,4 +1,6 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Page } from '../api/client.ts'
+import { Button } from '@/components/ui/button'
 
 type Props = {
   page: Page<unknown>
@@ -12,15 +14,19 @@ export function Pager({ page, onPage }: Props) {
   const last = page.page * page.size + page.items.length
   const hasNext = (page.page + 1) * page.size < page.totalItems
   return (
-    <nav aria-label="Pages" className="toolbar">
-      <span>{page.items.length > 0 ? `${first}–${last} of ${page.totalItems}` : `No more results (${page.totalItems} total)`}</span>
-      <span>
-        <button type="button" disabled={page.page === 0} onClick={() => onPage(page.page - 1)}>
+    <nav aria-label="Pages" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <span className="text-muted-foreground">
+        {page.items.length > 0 ? `${first}–${last} of ${page.totalItems}` : `No more results (${page.totalItems} total)`}
+      </span>
+      <span className="flex gap-2">
+        <Button type="button" variant="outline" size="sm" disabled={page.page === 0} onClick={() => onPage(page.page - 1)}>
+          <ChevronLeft aria-hidden="true" />
           Previous
-        </button>{' '}
-        <button type="button" disabled={!hasNext} onClick={() => onPage(page.page + 1)}>
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={!hasNext} onClick={() => onPage(page.page + 1)}>
           Next
-        </button>
+          <ChevronRight aria-hidden="true" />
+        </Button>
       </span>
     </nav>
   )
