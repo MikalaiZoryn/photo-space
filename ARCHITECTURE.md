@@ -20,10 +20,13 @@ Browser
   |
   | HTTPS, secure application session
   v
-React + TypeScript frontend
-  |
-  | authenticated API requests
-  v
+CloudFront + WAF (TLS, rate limits, security headers)
+  |                         |
+  | static frontend         | /api/* through a VPC origin
+  v                         v
+React + TypeScript      internal load balancer
+frontend (private S3)       |
+                            v
 Spring Boot API (ECS Fargate)
   |          |                |
   |          |                +--> Google APIs through integration adapters
@@ -455,7 +458,8 @@ Implement after the first photo-to-content vertical slice.
 -   Health/readiness endpoints.
 -   Separate local, test, staging, and production configuration.
 -   Document deployment, rollback, secret rotation, backup restore, and
-    failed-job recovery.
+    failed-job recovery. These are in `docs/operations.md`; the AWS
+    topology is decision D18 in `docs/decisions.md`.
 
 ## 15. Key architecture decisions to preserve
 

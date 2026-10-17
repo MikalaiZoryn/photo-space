@@ -1,0 +1,59 @@
+name: Deploy
+
+# Started by hand from the Actions tab (D18): pick the environment and the branch or tag to deploy. The CI
+# checks run first; the deploy runs only if they all pass. To roll back, run this again on an earlier tag or
+# commit (docs/operations.md).
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        type: choice
+        options: [staging, prod]
+        default: staging
+
+permissions:
+  contents: read
+
+concurrency:
+  # One deploy per environment at a time, and never cancelled halfway.
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # The GitHub environment holds AWS_DEPLOY_ROLE_ARN and can require a reviewer before prod deploys.
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write # GitHub's OIDC token, exchanged for short-lived AWS credentials; no AWS keys are stored.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: infra/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            infra/package-lock.json
+            frontend/package-lock.json
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-west-2
+      - run: npm ci && npm run build
+        working-directory: frontend
+      - run: npm ci
+        working-directory: infra
+      # Builds the backend image, pushes it to the CDK asset repository, and updates both stacks. ECS rolls the
+      # services and rolls back on its own if new tasks fail their health checks.
+      - run: >-
+          npx cdk deploy PhotoSpace-${{ inputs.environment }}-Edge PhotoSpace-${{ inputs.environment }}
+          -c env=${{ inputs.environment }} --require-approval never
+        working-directory: infra

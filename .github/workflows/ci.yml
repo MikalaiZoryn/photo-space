@@ -4,12 +4,15 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The deploy workflow runs these checks first and deploys only if they pass.
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # Called from the deploy workflow, this run shares that workflow's concurrency group instead.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,6 +33,15 @@ jobs:
       # Unit tests (Surefire) and Testcontainers integration tests (Failsafe) against PostgreSQL 18 and the
       # S3 and SQS emulators.
       - run: ./mvnw -B verify
+
+  backend-image:
+    name: Backend image (docker build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # The image the ECS services run (D18). Built to check the Dockerfile; nothing is pushed.
+      - run: docker build -t photo-space-backend:ci backend
 
   frontend:
     name: Frontend (lint, typecheck, test, build)
@@ -64,9 +76,14 @@ jobs:
         with:
           node-version-file: infra/.nvmrc
           cache: npm
-          cache-dependency-path: infra/package-lock.json
+          cache-dependency-path: |
+            infra/package-lock.json
+            frontend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # The stack uploads the built frontend, so synthesis needs it.
+      - run: npm ci && npm run build
+        working-directory: frontend
       # Synthesizes without AWS credentials; nothing is deployed.
-      - run: npx cdk synth -q -c env=staging -c appOrigin=https://staging.example.com
+      - run: npx cdk synth -q -c env=staging

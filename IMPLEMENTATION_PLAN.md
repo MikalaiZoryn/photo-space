@@ -296,7 +296,131 @@ data.
 -   Key failures generate useful alerts.
 -   Deployment and rollback procedures are documented.
 
-## Milestone 9 --- Gmail read/draft integration (later; compliance gate)
+## Milestone 9 --- Branded inquiry form and public intake
+
+A photographer publishes one branded General Inquiry form, shared as a
+hosted link or embedded on their own site. A visitor submits without an
+account; the submission becomes an `Inquiry`, kept apart from clients
+until the photographer links it to one. This is inquiry capture, not
+booking.
+
+Fit to the current codebase:
+
+-   No lead or proposal entity exists. The new `Inquiry` is the lead.
+    Once linked to a client it becomes a session in `INQUIRY` status.
+    Proposals are not built here; the follow-up task is the point a
+    later proposal workflow plugs into.
+-   No service catalog exists. Service choices live in the form
+    configuration; the chosen label becomes the session's
+    `session_type`.
+-   The `InquirySubmitted` event is a job row written in the
+    submission's transaction (D12 outbox). No new messaging.
+-   No notification provider exists. A review task and the inquiry
+    list in the app are the notification.
+
+### Tasks
+
+-   **Branding** (`workspaces` module, not the AI brand profile):
+    display name, logo, primary and accent colors (hex), font from a
+    fixed list, optional email, phone, and short description. Defaults
+    for missing values. The logo goes through the existing presigned
+    upload path (type and size limits) and is served by short-lived
+    URL. No custom CSS, HTML, or scripts.
+-   **Form model:** `public_forms` (workspace, opaque random public
+    slug, status, editable draft config, current published version) and
+    immutable `public_form_versions`. Config is validated JSON:
+    title, intro, confirmation message, and ordered questions with a
+    stable ID, type (short text, long text, email, phone, date,
+    single choice), label, help text, required flag, and choices; plus
+    an optional service selector (choices, required flag).
+-   **Builder UI:** start from a default template; edit, add, remove,
+    and reorder (up/down buttons) questions; live branded preview; save
+    draft; publish, unpublish, republish; show status, the hosted URL,
+    and an iframe snippet, each with a copy button. Publishing
+    snapshots the draft as a new version; later draft edits don't touch
+    the live form.
+-   **Public pages:** `/inquiry/{slug}` and `/embed/inquiry/{slug}`
+    (minimal chrome) render the same published version with branding.
+    Responsive, with loading, validation, success, and error states.
+    Unpublished or unknown slugs give the same not-found response.
+-   **Public API** under `/api/public/inquiry/{slug}`: `GET` the
+    published config and branding only; `POST` a submission. The server
+    resolves workspace, form, and version from the slug, validates
+    answers against that version (required, formats, choice values),
+    and ignores client-sent IDs. Abuse controls: body size limit,
+    honeypot field, minimum fill time, a WAF rate rule for the path,
+    and generic error messages.
+-   **Submission:** persist an `inquiries` row (form, version, answers
+    by question ID, service choice, preferred date, source hosted or
+    embed, safe referrer and UTM values, status) plus the outbox job in
+    one transaction. Answers are immutable; the original submission is
+    kept for audit. A client-generated idempotency key, unique per
+    form, makes retries and double submits return the first result.
+    The visitor's response is the same whether or not a client matched.
+-   **Matching** (handler: idempotent, bounded retries, DLQ): look up
+    clients in the inquiry's workspace by normalized email (trimmed,
+    lower case; add an index). No match: status `NEW`. Any match:
+    `NEEDS_REVIEW`. Never attach a client automatically and never touch
+    client records. Create one review task per inquiry. A redelivered
+    job creates nothing new.
+-   **Association** (member action, audited): from the inquiry, either
+    link a listed matching client or create a new client from the
+    answers. The same transaction sets status `ASSOCIATED`, stores the
+    client, and creates one `INQUIRY` session (preferred date as a note,
+    not a booking) and one follow-up task through the existing
+    services. Only a `NEW` or `NEEDS_REVIEW` inquiry can be associated
+    (version check); a repeated request creates nothing new. The client
+    must be in the inquiry's workspace.
+-   **Dismissal** (member action, audited): a `NEW` or `NEEDS_REVIEW`
+    inquiry (spam, not a fit) can be set to `DISMISSED`, which completes
+    its review task and creates nothing. The inquiry and its answers
+    are kept. Reopening returns it to `NEW` or `NEEDS_REVIEW` from a
+    fresh match.
+-   **Inquiries view:** list inquiries by status, dismissed hidden by
+    default; the detail page shows the answers, the matching clients
+    (`NEEDS_REVIEW`), the associate, create-client, dismiss, and reopen
+    actions, and links to the created client, session, and tasks.
+-   **Framing:** add a CloudFront behavior for `/embed/*` with
+    `frame-ancestors *` and no `X-Frame-Options`; every other path keeps
+    `DENY`. Embed pages use no session cookie or workspace API.
+-   Audit branding changes, publish, and unpublish. Record the design
+    in `docs/decisions.md`. Document the endpoints, event payload (IDs
+    only, no personal data), embed snippet and fixed-height sizing, and
+    limitations.
+
+### Acceptance criteria
+
+-   Only workspace members can change branding, edit or publish forms,
+    view inquiries, and associate them; cross-workspace requests,
+    matches, and associations are denied (tested).
+-   Hosted and embedded pages render the same published version; draft
+    edits don't change them until republished.
+-   Unpublishing stops new submissions; existing inquiries, clients,
+    and sessions remain.
+-   Server validation rejects missing required answers, bad formats,
+    unknown choices, and unknown questions; public responses never
+    expose drafts, other workspaces, or internal errors.
+-   A valid submission creates exactly one inquiry and one review task
+    and changes no client, even with retried requests or redelivered
+    jobs. An email match sets `NEEDS_REVIEW`; no match sets `NEW`
+    (tested).
+-   Associating an inquiry creates exactly one client link, `INQUIRY`
+    session, and follow-up task, even when repeated; nothing downstream
+    happens before association (tested).
+-   A dismissed inquiry can't be associated, keeps its answers, and can
+    be reopened; dismissing creates no client, session, or task
+    (tested).
+-   Nothing is booked, sent, or charged automatically.
+-   Only `/embed/*` can be framed by other sites (infra test).
+-   Backend, frontend, and infra tests, lint, and builds pass.
+
+Out of scope: website or page builder, custom domains, more than one
+form type, availability or instant booking, payments, contracts, a
+proposal system, custom HTML/CSS/JS, auto-resizing embed script,
+CAPTCHA, new notification provider, email verification of submitters
+(a later option for safer matching; even then not proof of identity).
+
+## Milestone 10 --- Gmail read/draft integration (later; compliance gate)
 
 ### Tasks
 
@@ -326,7 +450,7 @@ data.
 -   Public-launch compliance status is documented and verified against
     current Google guidance.
 
-## Milestone 10 --- Calendar integration and approved actions
+## Milestone 11 --- Calendar integration and approved actions
 
 ### Tasks
 
@@ -350,7 +474,7 @@ data.
     authorization/approval.
 -   Every execution is auditable and can be disabled operationally.
 
-## Milestone 11 --- Commercialization readiness
+## Milestone 12 --- Commercialization readiness
 
 ### Tasks
 
@@ -684,7 +808,7 @@ sequentially and keep each change small enough to review and test.
         flows, and the API was exercised through the dev proxy.
         Worth a quick manual pass: README, "Clients and sessions".
     -   No hard delete or data export for clients yet; these belong
-        to data-retention work (Milestone 11).
+        to data-retention work (Milestone 12).
     -   List filters and the current page are not kept in the URL, so
         going back from a detail page returns to page one.
     -   Client search uses `ILIKE` without a trigram index. That is
@@ -838,7 +962,7 @@ sequentially and keep each change small enough to review and test.
         bundled inside `aws-cdk-lib`. It is only used by `cdk synth`
         on developer and CI machines and is not deployed.
     -   Limits are global configuration, not per-workspace plans
-        (Milestone 11).
+        (Milestone 12).
 
 ### Milestone 5: done (2026-10-16)
 
@@ -1197,6 +1321,96 @@ with no behavior, API, or routing changes. Decision: D15.
     -   The job log says "succeeded" for jobs whose feature recorded a
         permanent failure (unchanged from Milestones 4 and 6).
 
-### Milestone 8: next
+### Milestone 8: in progress (code done 2026-10-17; not deployed yet)
 
-AWS deployment and operational hardening.
+The infrastructure, image, CI/CD, alarms, and runbook are written and
+verified locally. The staging deploy and the restore test have not been
+run: they wait for the go-ahead to create resources in the AWS account.
+Until they are done, the first, fourth, and sixth acceptance criteria are
+unmet.
+
+-   **Stacks** (D18, `infra/`): `PhotoSpace-<env>` in us-west-2 and
+    `PhotoSpace-<env>-Edge` (the CloudFront WAF) in us-east-1, for
+    `staging` and `prod` (`lib/environments.ts`). The environment stack
+    has a two-AZ VPC without NAT, CloudFront (the frontend from a private
+    bucket; `/api/*` through a VPC origin to an internal load balancer;
+    HSTS, CSP, and frame headers), the `api` and `worker` Fargate
+    services from one image with separate least-privilege task roles,
+    RDS PostgreSQL 18 (encrypted, TLS only, point-in-time restore, final
+    snapshot), the photo bucket and job queues (moved in from the old
+    storage stack, never deployed), Secrets Manager for the database
+    password and the Google OAuth client, and a `db-tools` psql task.
+    `PhotoSpace-GitHubDeploy` holds the GitHub OIDC deploy role.
+-   **Backend:** `backend/Dockerfile` (JRE 25, non-root, layered, RDS CA
+    bundle for `sslmode=verify-full`; dev sign-in and tests stay out of
+    the image) and the `aws` profile (`application-aws.yml`): real S3 and
+    SQS, JSON logs (Elastic Common Schema), and forwarded headers that
+    take the scheme from `CloudFront-Forwarded-Proto` and ignore viewer-
+    sent `X-Forwarded-Host` and `X-Forwarded-Port`. No application code
+    changed.
+-   **Alarms** (`lib/monitoring.ts`): API 5xx, load balancer 5xx, no
+    healthy API task, API or worker not running, ERROR log lines, jobs
+    failed on their last attempt, repeated failed attempts, dispatch and
+    queue poll failures, oldest job message over 10 minutes, DLQ
+    messages, and database CPU and free storage. All notify
+    `photo-space-<env>-alarms`.
+-   **Health and rollback:** load balancer readiness checks, container
+    liveness checks (bash `/dev/tcp`, since the JRE image has no curl),
+    100% minimum healthy, and the ECS circuit breaker with rollback.
+-   **CI/CD:** CI also builds the backend image and synthesizes after a
+    frontend build. The manual `Deploy` workflow runs the CI jobs first,
+    then `cdk deploy` with OIDC credentials (no AWS keys in GitHub).
+-   **Ops:** `docs/operations.md` (first deploy, deploys, rollback,
+    restart, backups, restore test, recovery, secret rotation, alarms,
+    failed jobs, DLQ, verification, teardown, costs) and
+    `infra/scripts/restore-test.sh`.
+-   **Verified locally on 2026-10-17:**
+    -   `cd backend && ./mvnw verify`: 58 unit tests and 108 integration
+        tests passed.
+        -   `ForwardedHeadersIT` (2, new) with the `aws` profile: behind
+            CloudFront headers (`CloudFront-Forwarded-Proto: https`, the
+            load balancer's `X-Forwarded-Proto: http` and
+            `X-Forwarded-Port: 80`, a forged `X-Forwarded-Host`) the
+            Google redirect URI is
+            `https://<cloudfront host>/api/auth/oauth2/callback/google`;
+            without the CloudFront header a forwarded `https` is ignored.
+            Its logs are JSON lines with `log.level` and `log.logger`.
+    -   `docker build -t photo-space-backend backend`: built. The image
+        ran as user `app` (uid 10001) with a read-only root file system
+        and a `/tmp` tmpfs against the Compose services, with the `aws`
+        profile; the bash liveness check passed after 5 seconds. No
+        secret-like environment variables are in the image.
+    -   `cd infra && npm run typecheck && npm test`: 34 tests passed:
+        task role actions and resources (API cannot delete or consume
+        jobs; puts only originals; listing limited to `workspaces/`),
+        job roles per service, secrets only through Secrets Manager,
+        read-only containers, health checks and circuit breaker,
+        internal load balancer, private database, security group
+        sources, database encryption, `rds.force_ssl`, backups and
+        snapshot policy, prod Multi-AZ and deletion protection,
+        CloudFront behaviors, headers, and CSP, the frontend bucket's
+        origin access control, every alarm wired to the topic, the job
+        failure metric filter, the WAF rules, the photo bucket and
+        queues (as in Milestone 4), and the GitHub role's trust and
+        permissions.
+    -   `npx cdk synth -q -c env=staging` and `-c env=prod`: both
+        synthesize without AWS credentials.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 80 tests passed, lint clean, build succeeded; no
+        secrets in `dist/`.
+-   **Not verified (needs the AWS deploy):** that the stacks deploy; the
+    VPC origin to the internal load balancer; Google sign-in through
+    CloudFront; presigned uploads, CORS, and the CSP against real S3;
+    `sslmode=verify-full` against RDS; the alarms firing; the WAF rules
+    against real traffic; the restore test and the recovery procedure;
+    the GitHub deploy workflow.
+-   **Known gaps:**
+    -   The CloudFront default domain allows TLS 1.0 to viewers; a custom
+        domain with an ACM certificate would fix that.
+    -   No automatic database password rotation (manual, with a restart),
+        no ECS Exec, no Container Insights, no CloudFront or load
+        balancer access logs, no WAF alarms.
+    -   Staging and prod use the mock AI provider; the Anthropic key is
+        not wired into the worker yet.
+    -   Tasks have public IPs (with closed security groups) because there
+        is no NAT gateway.

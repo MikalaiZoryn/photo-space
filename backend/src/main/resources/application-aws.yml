@@ -1,0 +1,29 @@
+# Deployed on AWS (Milestone 8, D18). ECS Fargate runs the same image as the API service and as the worker
+# service; the task definition sets SPRING_PROFILES_ACTIVE=aws, the database, bucket, and queue, the job roles,
+# and the secrets. Nothing in this file is a secret.
+
+app:
+  # The real S3 and SQS endpoints, with the ECS task role's credentials (the default credential chain).
+  storage:
+    endpoint: ""
+  jobs:
+    sqs-endpoint: ""
+
+server:
+  tomcat:
+    remoteip:
+      # Browsers reach the API only through CloudFront, which terminates TLS and forwards to an internal load
+      # balancer over plain HTTP. The load balancer overwrites X-Forwarded-Proto and X-Forwarded-Port with its
+      # own listener's values (http, 80), so the scheme comes from CloudFront's header, the port follows from
+      # the scheme, and the host is the Host header CloudFront forwards. Viewer-sent X-Forwarded-Host and
+      # X-Forwarded-Port are ignored. This makes the Google redirect URI https://<public host>/api/auth/….
+      protocol-header: CloudFront-Forwarded-Proto
+      port-header: ""
+      host-header: ""
+
+logging:
+  # One JSON object per line (Elastic Common Schema), so CloudWatch metric filters can match fields. The
+  # correlation ID is included from the MDC.
+  structured:
+    format:
+      console: ecs

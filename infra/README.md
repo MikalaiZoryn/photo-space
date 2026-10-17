@@ -1,15 +1,22 @@
 # infra
 
-The AWS CDK app, written in TypeScript (see `docs/decisions.md`, D1 and D13). It runs on Node 24's built-in TypeScript support, so there is no build step.
+The AWS CDK app, written in TypeScript (see `docs/decisions.md`, D1, D13, and D18). It runs on Node 24's built-in TypeScript support, so there is no build step. How to deploy, roll back, and restore is in [`docs/operations.md`](../docs/operations.md).
 
 ## Stacks
 
-`PhotoSpace-<env>-Storage` (`lib/storage-stack.ts`), one per environment (`dev`, `staging`, `prod`):
+Per environment (`staging`, `prod`; settings in `lib/environments.ts`):
 
-- **Photo bucket:** private. All public access is blocked, ACLs are disabled, non-TLS requests are denied, and objects use S3-managed encryption. It is versioned, and old versions expire after 30 days. Incomplete multipart uploads are aborted after 1 day. CORS allows only `PUT` with `content-type` from the app origin, for presigned browser uploads. The bucket is retained if the stack is deleted.
-- **Job queue** `photo-space-<env>-jobs`: a 15-minute visibility timeout (longer than the worker's 10-minute lease), SQS-managed encryption, and TLS only. After 5 receives that were never deleted, a message moves to `photo-space-<env>-jobs-dlq`, which keeps messages for 14 days.
+- `PhotoSpace-<env>` (`lib/photo-space-stack.ts`, us-west-2):
+  - **Network:** a VPC across two availability zones with public and isolated subnets and no NAT gateway, plus an S3 gateway endpoint.
+  - **Edge:** CloudFront serves the frontend from a private bucket (origin access control) and forwards `/api/*` uncached to an internal load balancer through a VPC origin. It adds security headers (HSTS, CSP, frame and type options) and uses the edge stack's firewall.
+  - **Services:** an ECS cluster with the `api` and `worker` Fargate services, both from `backend/Dockerfile`, each with its own least-privilege task role, a read-only root file system, health checks, and circuit-breaker rollback. A `db-tools` task definition runs psql in the VPC for restore tests.
+  - **Data:** RDS PostgreSQL 18 (encrypted, TLS only, point-in-time restore, final snapshot on deletion) and the private photo bucket and job queues (`lib/photo-storage.ts`, D11 and D12). The database password and the Google OAuth client are in Secrets Manager.
+  - **Monitoring** (`lib/monitoring.ts`): log groups, metric filters on the backend's JSON logs, alarms, and the `photo-space-<env>-alarms` SNS topic.
+- `PhotoSpace-<env>-Edge` (`lib/edge-stack.ts`, us-east-1): the CloudFront WAF web ACL with per-IP rate limits and AWS managed rules.
 
-Outputs give the values the backend needs: `PhotoBucketName` is `STORAGE_BUCKET`, and `JobQueueUrl` is `JOBS_QUEUE_URL`. ECS services, IAM task roles, and their grants arrive with Milestone 8.
+Once per account: `PhotoSpace-GitHubDeploy` (`lib/github-deploy-stack.ts`), the role that the GitHub `Deploy` workflow assumes through OIDC.
+
+The photo bucket is private: all public access is blocked, ACLs are disabled, non-TLS requests are denied, and objects use S3-managed encryption. It is versioned, and old versions expire after 30 days. Incomplete multipart uploads are aborted after 1 day. CORS allows only `PUT` with `content-type` from the app's CloudFront origin. The bucket is kept if the stack is deleted. The job queue `photo-space-<env>-jobs` has a 15-minute visibility timeout (longer than the worker's 10-minute lease); after 5 receives that were never deleted, a message moves to `photo-space-<env>-jobs-dlq`, which keeps messages for 14 days.
 
 ## Commands
 
@@ -17,15 +24,10 @@ Outputs give the values the backend needs: `PhotoBucketName` is `STORAGE_BUCKET`
 npm ci
 npm run typecheck
 npm test                                                     # CDK assertions with node --test
-npx cdk synth -c env=dev -c appOrigin=http://localhost:5173  # writes cdk.out/, needs no AWS credentials
+(cd ../frontend && npm ci && npm run build)                  # synthesis uploads frontend/dist
+npx cdk synth -q -c env=staging                              # writes cdk.out/, needs no AWS credentials or Docker
 ```
 
-Both context values are required. `appOrigin` must be a bare origin (`https://host[:port]`; `http` is accepted only for localhost). Deploying (`npx cdk deploy -c env=… -c appOrigin=…`) needs AWS credentials and a bootstrapped account, which Milestone 8 sets up. Nothing has been deployed yet.
+`-c env=staging|prod` is required. Deploying needs AWS credentials, Docker (to build the backend image), and a bootstrapped account: see [`docs/operations.md`](../docs/operations.md). Nothing has been deployed yet.
 
-## Dead-letter queue re-drive
-
-A message reaches the DLQ only when handling it kept crashing the worker or the database was unreachable. The job row stays unfinished, and the dispatcher re-sends it after 15 minutes. Moving DLQ messages back is always safe, because workers ignore messages for finished jobs:
-
-```bash
-aws sqs start-message-move-task --source-arn <dlq-arn> --destination-arn <queue-arn>
-```
+`scripts/restore-test.sh <env>` runs the database restore test against a deployed environment.
