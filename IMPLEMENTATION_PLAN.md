@@ -1197,6 +1197,96 @@ with no behavior, API, or routing changes. Decision: D15.
     -   The job log says "succeeded" for jobs whose feature recorded a
         permanent failure (unchanged from Milestones 4 and 6).
 
-### Milestone 8: next
+### Milestone 8: in progress (code done 2026-10-17; not deployed yet)
 
-AWS deployment and operational hardening.
+The infrastructure, image, CI/CD, alarms, and runbook are written and
+verified locally. The staging deploy and the restore test have not been
+run: they wait for the go-ahead to create resources in the AWS account.
+Until they are done, the first, fourth, and sixth acceptance criteria are
+unmet.
+
+-   **Stacks** (D18, `infra/`): `PhotoSpace-<env>` in us-west-2 and
+    `PhotoSpace-<env>-Edge` (the CloudFront WAF) in us-east-1, for
+    `staging` and `prod` (`lib/environments.ts`). The environment stack
+    has a two-AZ VPC without NAT, CloudFront (the frontend from a private
+    bucket; `/api/*` through a VPC origin to an internal load balancer;
+    HSTS, CSP, and frame headers), the `api` and `worker` Fargate
+    services from one image with separate least-privilege task roles,
+    RDS PostgreSQL 18 (encrypted, TLS only, point-in-time restore, final
+    snapshot), the photo bucket and job queues (moved in from the old
+    storage stack, never deployed), Secrets Manager for the database
+    password and the Google OAuth client, and a `db-tools` psql task.
+    `PhotoSpace-GitHubDeploy` holds the GitHub OIDC deploy role.
+-   **Backend:** `backend/Dockerfile` (JRE 25, non-root, layered, RDS CA
+    bundle for `sslmode=verify-full`; dev sign-in and tests stay out of
+    the image) and the `aws` profile (`application-aws.yml`): real S3 and
+    SQS, JSON logs (Elastic Common Schema), and forwarded headers that
+    take the scheme from `CloudFront-Forwarded-Proto` and ignore viewer-
+    sent `X-Forwarded-Host` and `X-Forwarded-Port`. No application code
+    changed.
+-   **Alarms** (`lib/monitoring.ts`): API 5xx, load balancer 5xx, no
+    healthy API task, API or worker not running, ERROR log lines, jobs
+    failed on their last attempt, repeated failed attempts, dispatch and
+    queue poll failures, oldest job message over 10 minutes, DLQ
+    messages, and database CPU and free storage. All notify
+    `photo-space-<env>-alarms`.
+-   **Health and rollback:** load balancer readiness checks, container
+    liveness checks (bash `/dev/tcp`, since the JRE image has no curl),
+    100% minimum healthy, and the ECS circuit breaker with rollback.
+-   **CI/CD:** CI also builds the backend image and synthesizes after a
+    frontend build. The manual `Deploy` workflow runs the CI jobs first,
+    then `cdk deploy` with OIDC credentials (no AWS keys in GitHub).
+-   **Ops:** `docs/operations.md` (first deploy, deploys, rollback,
+    restart, backups, restore test, recovery, secret rotation, alarms,
+    failed jobs, DLQ, verification, teardown, costs) and
+    `infra/scripts/restore-test.sh`.
+-   **Verified locally on 2026-10-17:**
+    -   `cd backend && ./mvnw verify`: 58 unit tests and 108 integration
+        tests passed.
+        -   `ForwardedHeadersIT` (2, new) with the `aws` profile: behind
+            CloudFront headers (`CloudFront-Forwarded-Proto: https`, the
+            load balancer's `X-Forwarded-Proto: http` and
+            `X-Forwarded-Port: 80`, a forged `X-Forwarded-Host`) the
+            Google redirect URI is
+            `https://<cloudfront host>/api/auth/oauth2/callback/google`;
+            without the CloudFront header a forwarded `https` is ignored.
+            Its logs are JSON lines with `log.level` and `log.logger`.
+    -   `docker build -t photo-space-backend backend`: built. The image
+        ran as user `app` (uid 10001) with a read-only root file system
+        and a `/tmp` tmpfs against the Compose services, with the `aws`
+        profile; the bash liveness check passed after 5 seconds. No
+        secret-like environment variables are in the image.
+    -   `cd infra && npm run typecheck && npm test`: 34 tests passed:
+        task role actions and resources (API cannot delete or consume
+        jobs; puts only originals; listing limited to `workspaces/`),
+        job roles per service, secrets only through Secrets Manager,
+        read-only containers, health checks and circuit breaker,
+        internal load balancer, private database, security group
+        sources, database encryption, `rds.force_ssl`, backups and
+        snapshot policy, prod Multi-AZ and deletion protection,
+        CloudFront behaviors, headers, and CSP, the frontend bucket's
+        origin access control, every alarm wired to the topic, the job
+        failure metric filter, the WAF rules, the photo bucket and
+        queues (as in Milestone 4), and the GitHub role's trust and
+        permissions.
+    -   `npx cdk synth -q -c env=staging` and `-c env=prod`: both
+        synthesize without AWS credentials.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 80 tests passed, lint clean, build succeeded; no
+        secrets in `dist/`.
+-   **Not verified (needs the AWS deploy):** that the stacks deploy; the
+    VPC origin to the internal load balancer; Google sign-in through
+    CloudFront; presigned uploads, CORS, and the CSP against real S3;
+    `sslmode=verify-full` against RDS; the alarms firing; the WAF rules
+    against real traffic; the restore test and the recovery procedure;
+    the GitHub deploy workflow.
+-   **Known gaps:**
+    -   The CloudFront default domain allows TLS 1.0 to viewers; a custom
+        domain with an ACM certificate would fix that.
+    -   No automatic database password rotation (manual, with a restart),
+        no ECS Exec, no Container Insights, no CloudFront or load
+        balancer access logs, no WAF alarms.
+    -   Staging and prod use the mock AI provider; the Anthropic key is
+        not wired into the worker yet.
+    -   Tasks have public IPs (with closed security groups) because there
+        is no NAT gateway.

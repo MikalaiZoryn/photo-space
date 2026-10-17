@@ -20,18 +20,18 @@ app:
       client-id: ${GOOGLE_CLIENT_ID:}
       client-secret: ${GOOGLE_CLIENT_SECRET:}
   # Private photo storage (D11). The defaults match the S3 emulator in compose.yaml. Deployed environments set
-  # STORAGE_BUCKET and AWS_REGION, and set STORAGE_ENDPOINT to an empty value so the real S3 endpoint is used.
+  # STORAGE_BUCKET and AWS_REGION, and the aws profile (application-aws.yml) clears the endpoint so real S3 is used.
   storage:
     bucket: ${STORAGE_BUCKET:photo-space-local}
     region: ${AWS_REGION:eu-central-1}
     endpoint: ${STORAGE_ENDPOINT:http://localhost:9090}
-  # Background jobs (D12). The defaults match the SQS emulator in compose.yaml.
+  # Background jobs (D12). The defaults match the SQS emulator in compose.yaml; the aws profile uses real SQS.
   jobs:
     queue-url: ${JOBS_QUEUE_URL:http://localhost:9324/000000000000/photo-space-jobs}
     region: ${AWS_REGION:eu-central-1}
     sqs-endpoint: ${JOBS_SQS_ENDPOINT:http://localhost:9324}
     dispatcher:
-      # The API service runs the dispatcher; the worker service may too.
+      # The API service runs the dispatcher (D18).
       enabled: ${JOBS_DISPATCHER_ENABLED:true}
       interval: 2s
       batch-size: 20

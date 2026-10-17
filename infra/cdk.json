@@ -1,6 +1,7 @@
 {
   "app": "node bin/photo-space.ts",
   "context": {
+    "githubRepository": "MikalaiZoryn/photo-space",
     "@aws-cdk/aws-signer:signingProfileNamePassedToCfn": true,
     "@aws-cdk/core:newStyleStackSynthesis": true,
     "@aws-cdk/core:stackRelativeExports": true,
@@ -100,6 +101,11 @@
     "@aws-cdk/aws-eks:defaultToAL2023": true,
     "@aws-cdk/core:annotationsInValidationReport": true,
     "@aws-cdk/core:validateAgainstDefaultRules": true,
-    "@aws-cdk/aws-ecs:removeEmptyLoadBalancers": true
+    "@aws-cdk/aws-ecs:removeEmptyLoadBalancers": true,
+    "@aws-cdk/core:defaultCrossStackReferences": "weak",
+    "@aws-cdk/core:target-partitions": [
+      "aws",
+      "aws-cn"
+    ]
   }
 }

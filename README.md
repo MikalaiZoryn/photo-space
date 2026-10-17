@@ -10,6 +10,7 @@ A management platform for photography businesses. It covers clients and sessions
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architecture, data model, security, jobs, AI, integrations |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Milestones, acceptance criteria, Definition of Done, progress |
 | [docs/decisions.md](docs/decisions.md) | Recorded technical decisions |
+| [docs/operations.md](docs/operations.md) | Deploying, rollback, backups and restore, secrets, alarms |
 | [CLAUDE.md](CLAUDE.md) | Working rules for Claude Code |
 
 ## Repository layout
@@ -17,7 +18,7 @@ A management platform for photography businesses. It covers clients and sessions
 ```text
 frontend/          React + TypeScript + Vite web app (Tailwind CSS, shadcn/ui, Vitest, oxlint)
 backend/           Java + Spring Boot modular monolith (Maven wrapper, Flyway)
-infra/             AWS CDK app in TypeScript: private photo bucket and job queues per environment
+infra/             AWS CDK app in TypeScript: staging and prod on AWS (CloudFront, ECS Fargate, RDS, S3, SQS)
 local/             Config for the local emulators (ElasticMQ queues)
 docs/              Decisions and operational docs
 compose.yaml       Local PostgreSQL, S3 emulator, and SQS emulator for development
@@ -32,7 +33,7 @@ compose.yaml       Local PostgreSQL, S3 emulator, and SQS emulator for developme
 | Node.js | 24 (LTS), npm 11+ | `frontend/.nvmrc` and `infra/.nvmrc` pin the major version. |
 | Docker | Engine 29+ with Compose v2+ | Runs local PostgreSQL 18, the S3 and SQS emulators, and the Testcontainers integration tests. |
 
-Local development and all tests need no cloud credentials. The CDK CLI is a dev dependency of `infra/`; deploying (Milestone 8) will also need the AWS CLI v2 and an AWS account.
+Local development and all tests need no cloud credentials. The CDK CLI is a dev dependency of `infra/`. Deploying also needs the AWS CLI v2 and an AWS account (see [docs/operations.md](docs/operations.md)).
 
 ## Development commands
 
@@ -239,7 +240,8 @@ To see a failed run, block task inserts for a moment: `docker compose exec postg
 ```bash
 cd backend && ./mvnw verify          # unit tests (Surefire) + integration tests with Testcontainers (Failsafe); needs Docker
 cd frontend && npm ci && npm run lint && npm run typecheck && npm test && npm run build
-cd infra && npm ci && npm run typecheck && npm test && npx cdk synth -q -c env=staging -c appOrigin=https://staging.example.com
+cd infra && npm ci && npm run typecheck && npm test && npx cdk synth -q -c env=staging   # after the frontend build
+docker build -t photo-space-backend backend   # the image both ECS services run
 ```
 
 - Backend unit tests only: `./mvnw test`.
@@ -252,11 +254,15 @@ Migrations are in `backend/src/main/resources/db/migration` and are named `V<n>_
 
 ### CI
 
-`.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It has three jobs: the backend job runs `./mvnw verify`, the frontend job runs lint, typecheck, test, and build, and the infra job runs typecheck, test, and `cdk synth`.
+`.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It has four jobs: the backend job runs `./mvnw verify`, the backend image job runs `docker build`, the frontend job runs lint, typecheck, test, and build, and the infra job runs typecheck, test, and `cdk synth`.
+
+`.github/workflows/deploy.yml` is started by hand for `staging` or `prod`. It runs the CI jobs first, then deploys with `cdk deploy` through a GitHub OIDC role (no AWS keys in GitHub). Setting it up is described in [docs/operations.md](docs/operations.md#deploy-a-change).
 
 ### Infrastructure
 
-`infra/` defines one storage stack per environment: the private photo bucket and the job queue with its dead-letter queue. See `infra/README.md`. Nothing has been deployed yet; deployment arrives with Milestone 8.
+`infra/` defines each deployed environment (`staging`, `prod`): CloudFront with a WAF in front of an internal load balancer, the `api` and `worker` ECS Fargate services from one image, RDS PostgreSQL, the private photo bucket, the job queues, secrets, and alarms. See `infra/README.md` for the stacks and [docs/operations.md](docs/operations.md) for deploying, rollback, the restore test, and alarms. Nothing has been deployed yet.
+
+The backend's `aws` profile (`application-aws.yml`) is what deployed tasks run: real S3 and SQS endpoints with the task role's credentials, JSON logs, and the forwarded-header settings for CloudFront.
 
 ## Status
 
