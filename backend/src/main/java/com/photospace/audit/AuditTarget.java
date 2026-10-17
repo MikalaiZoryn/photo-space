@@ -8,5 +8,9 @@ public enum AuditTarget {
     AUTOMATION_RUN,
     GALLERY,
     SHARE_LINK,
-    CONTENT_DRAFT
+    CONTENT_DRAFT,
+    /** A workspace's branding; the target ID is the workspace's. */
+    BRANDING,
+    INQUIRY_FORM,
+    INQUIRY
 }

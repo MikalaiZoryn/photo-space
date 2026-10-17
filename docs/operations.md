@@ -208,6 +208,8 @@ aws sqs start-message-move-task --region us-west-2 --source-arn <JobDeadLetterQu
 url=<AppUrl>
 curl -s "$url/api/health"                         # {"status":"UP","database":"UP"}
 curl -sI "$url/" | grep -i -E 'strict-transport|content-security|x-frame'
+curl -sI "$url/embed/inquiry/x" | grep -i -E 'frame'    # frame-ancestors * and no X-Frame-Options (D19)
+curl -sI "$url/inquiry/x" | grep -i 'x-frame'            # X-Frame-Options: DENY
 curl -s -o /dev/null -w '%{http_code}\n' "$url/actuator/health"   # not routed to the API: 403 from S3
 curl -s -o /dev/null -w '%{http_code}\n' "https://<PhotoBucketName>.s3.us-west-2.amazonaws.com/"  # 403
 aws s3api get-public-access-block --bucket <PhotoBucketName>      # all four settings true

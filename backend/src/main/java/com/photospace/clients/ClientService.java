@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,6 +20,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -119,6 +121,36 @@ public class ClientService {
         return setArchived(workspace, clientId, false);
     }
 
+    /**
+     * Creates a client from contact details another module has validated, such as an inquiry's answers, inside
+     * the caller's transaction.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ClientSummary createForWorkflow(WorkspaceContext workspace, String name, String email, String phone) {
+        return create(workspace, new ClientInput(name, email, phone, null)).summary();
+    }
+
+    /**
+     * Active clients of the workspace whose email, trimmed and lower-cased, is {@code normalizedEmail}. For work
+     * that authorized access to the workspace itself, such as inquiry matching. At most 20, by name.
+     */
+    @Transactional(readOnly = true)
+    public List<ClientMatch> findActiveByEmail(UUID workspaceId, String normalizedEmail) {
+        return jdbc.sql("""
+                        SELECT id, name, email, phone FROM clients
+                         WHERE workspace_id = :workspaceId AND lower(btrim(email)) = :email AND email IS NOT NULL
+                           AND archived_at IS NULL
+                         ORDER BY lower(name), id
+                         LIMIT 20
+                        """)
+                .param("workspaceId", workspaceId)
+                .param("email", normalizedEmail)
+                .query((rs, i) -> new ClientMatch(
+                        rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("email"),
+                        rs.getString("phone")))
+                .list();
+    }
+
     /** A client of this workspace, archived or not. Empty for unknown IDs and other workspaces' clients alike. */
     @Transactional(readOnly = true)
     public Optional<ClientSummary> findSummary(WorkspaceContext workspace, UUID clientId) {
@@ -207,4 +239,7 @@ public class ClientService {
 
     /** What other modules show about a linked client. */
     public record ClientSummary(UUID id, String name, boolean archived) {}
+
+    /** A client whose email matched, with the contact details a member compares before linking. */
+    public record ClientMatch(UUID id, String name, String email, String phone) {}
 }

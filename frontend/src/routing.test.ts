@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseRoute, paths } from './routing.ts'
+import { parseRoute, paths, publicInquiryRoute } from './routing.ts'
 
 describe('parseRoute', () => {
   it('reads every page from the hash', () => {
@@ -20,6 +20,10 @@ describe('parseRoute', () => {
     expect(parseRoute('#/automation')).toEqual({ page: 'automation' })
     expect(parseRoute('#/activity')).toEqual({ page: 'activity' })
     expect(parseRoute('#/members')).toEqual({ page: 'members' })
+    expect(parseRoute('#/inquiries')).toEqual({ page: 'inquiries' })
+    expect(parseRoute('#/inquiries/i-1')).toEqual({ page: 'inquiry', id: 'i-1' })
+    expect(parseRoute('#/inquiry-form')).toEqual({ page: 'inquiryForm' })
+    expect(parseRoute('#/branding')).toEqual({ page: 'branding' })
   })
 
   it('falls back to sessions for unknown hashes', () => {
@@ -32,5 +36,19 @@ describe('parseRoute', () => {
     expect(parseRoute(paths.clientEdit('c-1'))).toEqual({ page: 'clientEdit', id: 'c-1' })
     expect(parseRoute(paths.taskNew('s 1'))).toEqual({ page: 'taskNew', sessionId: 's 1' })
     expect(parseRoute(paths.taskEdit('t-1'))).toEqual({ page: 'taskEdit', id: 't-1' })
+  })
+})
+
+describe('publicInquiryRoute', () => {
+  it('recognizes the hosted and embedded inquiry pages', () => {
+    expect(publicInquiryRoute('/inquiry/AbC_-123')).toEqual({ slug: 'AbC_-123', embed: false })
+    expect(publicInquiryRoute('/inquiry/AbC_-123/')).toEqual({ slug: 'AbC_-123', embed: false })
+    expect(publicInquiryRoute('/embed/inquiry/AbC_-123')).toEqual({ slug: 'AbC_-123', embed: true })
+  })
+
+  it('ignores every other path', () => {
+    for (const path of ['/', '/inquiry', '/inquiry/', '/inquiry/a/b', '/embed/a', '/x/inquiry/a', '/embed/inquiry/']) {
+      expect(publicInquiryRoute(path)).toBeNull()
+    }
   })
 })

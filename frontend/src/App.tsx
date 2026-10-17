@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { fetchAuthOptions, fetchMe, signOut, type AuthOptions, type Me } from './api/auth.ts'
 import { PublicGalleryPage } from './galleries/PublicGalleryPage.tsx'
-import { usePublicGalleryToken } from './routing.ts'
+import { PublicInquiryPage } from './inquiries/PublicInquiryPage.tsx'
+import { publicInquiryRoute, usePublicGalleryToken } from './routing.ts'
 import { CenteredLayout } from './layout/CenteredLayout.tsx'
 import { SignIn } from './SignIn.tsx'
 import { Button } from '@/components/ui/button'
@@ -15,7 +16,12 @@ type Session =
   | { kind: 'signedIn'; me: Me }
 
 function App() {
+  const [inquiryRoute] = useState(() => publicInquiryRoute(window.location.pathname))
   const galleryToken = usePublicGalleryToken()
+  // The public inquiry form, hosted or embedded on another site: no sign-in flow and no workspace API call.
+  if (inquiryRoute !== null) {
+    return <PublicInquiryPage slug={inquiryRoute.slug} embed={inquiryRoute.embed} />
+  }
   // A gallery visitor's link: only that gallery, without the sign-in flow or any workspace API call.
   if (galleryToken !== null) {
     return <PublicGalleryPage key={galleryToken} token={galleryToken} />

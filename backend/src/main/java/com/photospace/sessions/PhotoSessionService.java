@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -212,6 +213,17 @@ public class PhotoSessionService {
                 .param("workspaceId", workspace.workspaceId())
                 .update();
         return get(workspace, sessionId);
+    }
+
+    /**
+     * Creates an unscheduled {@code INQUIRY} session for another module's workflow, such as an associated
+     * inquiry, inside the caller's transaction. The client must be an active client of this workspace.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public SessionSummary createForWorkflow(WorkspaceContext workspace, UUID clientId, String title, String sessionType,
+            String notes) {
+        SessionView created = create(workspace, new SessionInput(title, sessionType, clientId, null, null, null, notes));
+        return new SessionSummary(created.id(), created.title(), created.sessionType(), false);
     }
 
     /** A session of this workspace, archived or not. Empty for unknown IDs and other workspaces' sessions alike. */

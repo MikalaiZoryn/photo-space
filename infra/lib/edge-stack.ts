@@ -13,6 +13,8 @@ export const RATE_LIMITS = {
   auth: 100,
   /** The gallery visitor API (D14). Share tokens can't be guessed, but nobody should get to try at scale. */
   publicGallery: 600,
+  /** The public inquiry form API (D19): loading the form and submitting it. A person sends a handful. */
+  publicInquiry: 100,
 }
 
 /**
@@ -75,12 +77,13 @@ export class EdgeStack extends Stack {
       visibilityConfig: visibility(`${name}-cdn`),
       rules: [
         rateRule('rate-limit-auth', 0, RATE_LIMITS.auth, '/api/auth/'),
-        rateRule('rate-limit-public-gallery', 1, RATE_LIMITS.publicGallery, '/api/public/'),
-        rateRule('rate-limit-all', 2, RATE_LIMITS.all),
+        rateRule('rate-limit-public-gallery', 1, RATE_LIMITS.publicGallery, '/api/public/gallery'),
+        rateRule('rate-limit-public-inquiry', 2, RATE_LIMITS.publicInquiry, '/api/public/inquiry/'),
+        rateRule('rate-limit-all', 3, RATE_LIMITS.all),
         // The 8 KB body limit only counts: photographers' notes and brand profiles are JSON bodies that may be
-        // longer, and the API validates sizes itself.
-        managedRule('AWSManagedRulesCommonRuleSet', 3, ['SizeRestrictions_BODY']),
-        managedRule('AWSManagedRulesKnownBadInputsRuleSet', 4),
+        // longer, and the API validates sizes itself (public inquiry submissions at 64 KB).
+        managedRule('AWSManagedRulesCommonRuleSet', 4, ['SizeRestrictions_BODY']),
+        managedRule('AWSManagedRulesKnownBadInputsRuleSet', 5),
       ],
     })
   }

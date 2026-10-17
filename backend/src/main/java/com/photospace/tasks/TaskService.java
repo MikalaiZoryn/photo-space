@@ -212,6 +212,65 @@ public class TaskService {
                 .single());
     }
 
+    /**
+     * Creates a task for another module's workflow, such as an inquiry's review task, inside the caller's
+     * transaction. A null {@code actorId} means the system did it. The caller has checked that the client and
+     * session belong to {@code workspaceId}; the database's composite foreign keys check it again.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public UUID createForWorkflow(UUID workspaceId, UUID actorId, TaskSource source, String title, LocalDate dueDate,
+            UUID clientId, UUID sessionId) {
+        UUID id = jdbc.sql("""
+                        INSERT INTO tasks (workspace_id, client_id, session_id, title, due_date, status, source, created_by)
+                        VALUES (:workspaceId, :clientId, :sessionId, :title, :dueDate, 'OPEN', :source, :actorId)
+                        RETURNING id
+                        """)
+                .param("workspaceId", workspaceId)
+                .param("clientId", clientId)
+                .param("sessionId", sessionId)
+                .param("title", title)
+                .param("dueDate", dueDate)
+                .param("source", source.name())
+                .param("actorId", actorId)
+                .query(UUID.class)
+                .single();
+        audit.record(workspaceId, actorId, AuditAction.TASK_CREATED, AuditTarget.TASK, id, dueDetail(dueDate));
+        return id;
+    }
+
+    /**
+     * Completes or reopens a workflow's task inside the caller's transaction. Does nothing if the task was deleted
+     * or already has that status. Returns whether the task still exists.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean changeStatusForWorkflow(UUID workspaceId, UUID actorId, UUID taskId, TaskStatus target) {
+        Optional<TaskRow> current = find(workspaceId, taskId, true);
+        if (current.isEmpty()) {
+            return false;
+        }
+        if (current.get().status() == target) {
+            return true;
+        }
+        boolean done = target == TaskStatus.DONE;
+        jdbc.sql("""
+                        UPDATE tasks
+                           SET status = :status,
+                               completed_at = CASE WHEN :done THEN now() END,
+                               completed_by = CASE WHEN :done THEN CAST(:userId AS uuid) END,
+                               version = version + 1, updated_at = now()
+                         WHERE id = :id AND workspace_id = :workspaceId
+                        """)
+                .param("status", target.name())
+                .param("done", done)
+                .param("userId", actorId)
+                .param("id", taskId)
+                .param("workspaceId", workspaceId)
+                .update();
+        audit.record(workspaceId, actorId, done ? AuditAction.TASK_COMPLETED : AuditAction.TASK_REOPENED,
+                AuditTarget.TASK, taskId, null);
+        return true;
+    }
+
     /** The task each of the given automation runs created, by run ID. Runs whose task was deleted are left out. */
     @Transactional(readOnly = true)
     public Map<UUID, UUID> tasksOfRuns(WorkspaceContext workspace, List<UUID> runIds) {

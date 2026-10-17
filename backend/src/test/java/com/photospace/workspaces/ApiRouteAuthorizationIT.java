@@ -29,6 +29,7 @@ class ApiRouteAuthorizationIT {
             "/api/workspaces", // the signed-in user's memberships
             "/api/public/gallery", // a gallery visitor, authorized by a share link token
             "/api/public/gallery/photos/{assetId}/download", // the same
+            "/api/public/inquiry/{slug}", // an inquiry form visitor; only a published form, chosen by its slug
             "/api/dev/login", // test classpath only
             "/error");
 

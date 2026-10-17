@@ -44,6 +44,8 @@ type RequestOptions = {
   signal?: AbortSignal
   /** Extra request headers, such as a gallery visitor's share token. */
   headers?: Record<string, string>
+  /** False for the public inquiry API, which takes no CSRF token: the embedded form has no cookies. */
+  csrf?: boolean
 }
 
 const CSRF_COOKIE = 'XSRF-TOKEN'
@@ -55,11 +57,11 @@ const CSRF_HEADER = 'X-XSRF-TOKEN'
  */
 export async function api<T>(
   path: string,
-  { method = 'GET', body, signal, headers: extraHeaders }: RequestOptions = {},
+  { method = 'GET', body, signal, headers: extraHeaders, csrf = true }: RequestOptions = {},
 ): Promise<T> {
   const headers: Record<string, string> = { ...extraHeaders, Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  if (method !== 'GET') headers[CSRF_HEADER] = await csrfToken(signal)
+  if (method !== 'GET' && csrf) headers[CSRF_HEADER] = await csrfToken(signal)
 
   const response = await fetch(path, {
     method,

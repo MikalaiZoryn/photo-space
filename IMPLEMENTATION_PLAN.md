@@ -1414,3 +1414,128 @@ unmet.
         not wired into the worker yet.
     -   Tasks have public IPs (with closed security groups) because there
         is no NAT gateway.
+
+### Milestone 9: code done (2026-10-17; not deployed, no browser run)
+
+Built while Milestone 8 waits for the AWS deploy and restore test, which
+also cover this milestone's CloudFront and WAF changes.
+
+-   **Schema:** `V9__branding_forms_inquiries.sql` adds
+    `workspace_branding`, `public_forms` (one per workspace, random
+    slug, draft config), immutable `public_form_versions`, and
+    `inquiries` (answers by question ID, contact columns, source
+    details, per-form unique idempotency key, links to the client,
+    session, and tasks), a trigger that keeps an inquiry's submitted
+    fields unchangeable, the normalized-email index on `clients`, and
+    `INQUIRY` as a task source.
+-   **Branding** (new `branding` module, D19): defaults at version 0,
+    hex colors, a fixed font list, optional contact details, audited
+    saves by any member. The logo is a session-less photo asset
+    (`POST …/branding/logo-uploads`, 5 MB), processed like a photo and
+    served by a 10-minute thumbnail URL. Deviation from the plan: a
+    separate module, not `workspaces`, because `audit` and `assets`
+    depend on `workspaces` and would form a cycle.
+-   **Form** (`inquiries` module): created from a default template;
+    the draft is validated JSON (`FormConfig`: up to 30 questions of six
+    types, reserved `name`/`email`/`phone`/`preferredDate`, an optional
+    service selector). Publishing snapshots the draft as a numbered
+    version; unpublishing stops submissions. Both audited.
+-   **Public API:** `GET`/`POST /api/public/inquiry/{slug}` in its own
+    stateless security chain (no CSRF, no cookies). Server-side answer
+    checks against the published version, client-sent IDs ignored,
+    generic 404 for every unusable slug, a 64 KB body limit, a
+    honeypot, a 3-second minimum fill time, and the same 202 answer for
+    stored, repeated, and dropped submissions.
+-   **Matching and decisions:** the inquiry and its `match-inquiry` job
+    are one transaction (outbox). The job sets `NEW` or `NEEDS_REVIEW`
+    by normalized email and creates one review task; a redelivered job
+    creates nothing, and a job that gives up sends the inquiry to
+    review. A member associates (an existing client or a new one from
+    the answers: one `INQUIRY` session with the preferred date in its
+    notes, one follow-up task, the review task completed), dismisses
+    (creates nothing), or reopens (matches again). All version-checked,
+    idempotent, and audited. No client is changed by matching.
+-   **Frontend:** **Inquiries** (status filter, dismissed hidden by
+    default) and an inquiry page (answers, matches with **Link to …**,
+    **Create a new client from these answers**, **Dismiss**,
+    **Reopen**, links to the created records); **Inquiry form** (texts,
+    service selector, questions with add/remove/up/down, live branded
+    preview, save, publish, unpublish, hosted URL and iframe snippet
+    with copy buttons); **Branding** (color pickers, font, logo upload
+    with processing status, preview); the public pages at
+    `/inquiry/<slug>` and `/embed/inquiry/<slug>` (loading, field
+    errors, success, not-available states; no sign-in or workspace API
+    call). Activity labels for the new audit actions; an **Inquiry**
+    badge on inquiry tasks. No new dependencies.
+-   **Infra:** CloudFront behaviors `/inquiry/*` and `/embed/*` with a
+    viewer-request function that serves `index.html`; `/embed/*` has
+    its own headers policy (`frame-ancestors *`, no
+    `X-Frame-Options`), everything else keeps `DENY`. WAF rule
+    `rate-limit-public-inquiry` (100 per IP per 5 minutes); the gallery
+    rule is now scoped to `/api/public/gallery`.
+-   **Docs:** D19; ARCHITECTURE §3, §4, §6, §8 (public inquiry pages);
+    README (API, rules, manual check); infra README; operations
+    (verifying the frame headers).
+-   **Verified locally on 2026-10-17:**
+    -   `cd backend && ./mvnw verify`: 73 unit tests and 131 integration
+        tests passed.
+        -   `FormConfigTest` (6), `AnswersTest` (5),
+            `SubmissionSourceTest` (4): template validity, reserved
+            questions and types, ID, label, choice, and size limits;
+            answer types, required answers, unknown questions without
+            echoing them, date range, service choices; referrer
+            reduction and UTM cleaning.
+        -   `InquiriesIT` (18): the form is created once; drafts stay
+            private until republished; an unchanged republish reuses
+            the version; unpublishing stops submissions and keeps
+            inquiries; invalid drafts are refused; draft, unknown,
+            malformed, and unpublished slugs all give the same 404;
+            answer validation; client-sent workspace and form IDs are
+            ignored, and source details are reduced; one inquiry and
+            one review task per submission even when retried or when
+            the job is redelivered (and after `giveUp`), with no client
+            changed and no cookie set; an email match (other case and
+            spaces, other workspace's client ignored) needs review but
+            links nothing; honeypot, too-fast, and untimed submissions
+            are dropped with the same answer; 413 over 64 KB; the
+            trigger refuses changes to the submission; association with
+            an existing client and with a new client creates exactly one
+            client link, session, and follow-up task even when repeated,
+            with nothing created before it; dismissal creates nothing,
+            blocks association, keeps answers, hides from the default
+            list, and reopening matches again; a deleted review task is
+            recreated on reopen; cross-workspace denial on every form
+            and inquiry route and for foreign clients; members (not
+            only owners) can edit, publish, and associate; audit
+            events for each step.
+        -   `BrandingIT` (5): defaults, saving with normalized colors
+            and ignored unknown fields, stale-version 409, validation,
+            the logo upload end to end with a working presigned URL,
+            refusal of session photos, pending uploads, and other
+            workspaces' logos, member access, cross-workspace denial.
+        -   `ApiRouteAuthorizationIT` allow-lists
+            `/api/public/inquiry/{slug}`; `BackendApplicationIT` expects
+            V9.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 92 tests passed (10 in `Inquiries.test.tsx`, 2
+        new in `routing.test.ts`), lint clean, build succeeded (JS
+        about 137 kB gzipped). `vite preview` serves the app for
+        `/inquiry/<slug>` and `/embed/inquiry/<slug>`.
+    -   `cd infra && npm run typecheck && npm test`: 36 tests passed
+        (new: the app-shell function on both public paths, and only
+        `/embed/*` frameable). `npx cdk synth -q -c env=staging` and
+        `-c env=prod` succeed.
+-   **Not verified:** a browser run of the new pages (none was done
+    this time); anything on AWS: the CloudFront function and behaviors,
+    the embed framing headers, the WAF rule, and the logo against real
+    S3.
+-   **Known gaps:**
+    -   An email match is a hint, not identity: there is no email
+        verification of submitters. The minimum fill time is measured
+        by the page and can be faked; there is no CAPTCHA.
+    -   No notification beyond the review task and the inquiry list.
+    -   The logo thumbnail is a JPEG on white, so transparency is lost.
+        Branding changes show on the public pages at once (not
+        versioned).
+    -   The embed has a fixed height; there is no resizing script.
+    -   Inquiries have no retention policy or deletion yet.

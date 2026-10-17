@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CalendarDays, History, Images, ListChecks, Plus, Sparkles, UserCog, Users, Workflow } from 'lucide-react'
+import { CalendarDays, ClipboardList, History, Images, Inbox, ListChecks, Plus, Sparkles, UserCog, Users, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { ActivityPage } from './activity/ActivityPage.tsx'
@@ -11,6 +11,10 @@ import { ContentPage } from './content/ContentPage.tsx'
 import { CreateWorkspaceForm } from './CreateWorkspaceForm.tsx'
 import { GalleriesPage } from './galleries/GalleriesPage.tsx'
 import { GalleryPage } from './galleries/GalleryPage.tsx'
+import { BrandingPage } from './inquiries/BrandingPage.tsx'
+import { FormBuilderPage } from './inquiries/FormBuilderPage.tsx'
+import { InquiriesPage } from './inquiries/InquiriesPage.tsx'
+import { InquiryDetail } from './inquiries/InquiryDetail.tsx'
 import { AppShell, type NavItem } from './layout/AppShell.tsx'
 import { CenteredLayout } from './layout/CenteredLayout.tsx'
 import { listMembers, listWorkspaces, type Workspace } from './api/workspaces.ts'
@@ -180,7 +184,11 @@ function WorkspaceHome({
   const route = useRoute()
   const section = route.page.startsWith('client')
     ? 'clients'
-    : route.page.startsWith('galler')
+    : route.page === 'inquiries' || route.page === 'inquiry'
+      ? 'inquiries'
+      : route.page === 'inquiryForm' || route.page === 'branding'
+        ? 'inquiryForm'
+        : route.page.startsWith('galler')
       ? 'galleries'
       : route.page.startsWith('content')
         ? 'content'
@@ -193,6 +201,8 @@ function WorkspaceHome({
     { href: paths.sessions(), label: 'Sessions', icon: CalendarDays, current: section === 'sessions' },
     { href: paths.tasks(), label: 'Tasks', icon: ListChecks, current: section === 'tasks' },
     { href: paths.clients(), label: 'Clients', icon: Users, current: section === 'clients' },
+    { href: paths.inquiries(), label: 'Inquiries', icon: Inbox, current: section === 'inquiries' },
+    { href: paths.inquiryForm(), label: 'Inquiry form', icon: ClipboardList, current: section === 'inquiryForm' },
     { href: paths.galleries(), label: 'Galleries', icon: Images, current: section === 'galleries' },
     { href: paths.content(), label: 'Content', icon: Sparkles, current: section === 'content' },
     { href: paths.automation(), label: 'Automation', icon: Workflow, current: section === 'automation' },
@@ -253,6 +263,14 @@ function RoutedPage({ workspace, route }: { workspace: Workspace; route: Route }
       return <ActivityPage workspaceId={workspaceId} timezone={timezone} />
     case 'members':
       return <MembersPage workspace={workspace} />
+    case 'inquiries':
+      return <InquiriesPage workspaceId={workspaceId} timezone={timezone} />
+    case 'inquiry':
+      return <InquiryDetail key={route.id} workspaceId={workspaceId} inquiryId={route.id} timezone={timezone} />
+    case 'inquiryForm':
+      return <FormBuilderPage workspaceId={workspaceId} />
+    case 'branding':
+      return <BrandingPage workspaceId={workspaceId} />
   }
 }
 

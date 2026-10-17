@@ -8,11 +8,11 @@ Per environment (`staging`, `prod`; settings in `lib/environments.ts`):
 
 - `PhotoSpace-<env>` (`lib/photo-space-stack.ts`, us-west-2):
   - **Network:** a VPC across two availability zones with public and isolated subnets and no NAT gateway, plus an S3 gateway endpoint.
-  - **Edge:** CloudFront serves the frontend from a private bucket (origin access control) and forwards `/api/*` uncached to an internal load balancer through a VPC origin. It adds security headers (HSTS, CSP, frame and type options) and uses the edge stack's firewall.
+  - **Edge:** CloudFront serves the frontend from a private bucket (origin access control) and forwards `/api/*` uncached to an internal load balancer through a VPC origin. It adds security headers (HSTS, CSP, frame and type options) and uses the edge stack's firewall. A CloudFront Function serves `index.html` for the public inquiry pages (`/inquiry/*`, `/embed/*`); only `/embed/*` may be framed by other sites (`frame-ancestors *`, no `X-Frame-Options`; D19).
   - **Services:** an ECS cluster with the `api` and `worker` Fargate services, both from `backend/Dockerfile`, each with its own least-privilege task role, a read-only root file system, health checks, and circuit-breaker rollback. A `db-tools` task definition runs psql in the VPC for restore tests.
   - **Data:** RDS PostgreSQL 18 (encrypted, TLS only, point-in-time restore, final snapshot on deletion) and the private photo bucket and job queues (`lib/photo-storage.ts`, D11 and D12). The database password and the Google OAuth client are in Secrets Manager.
   - **Monitoring** (`lib/monitoring.ts`): log groups, metric filters on the backend's JSON logs, alarms, and the `photo-space-<env>-alarms` SNS topic.
-- `PhotoSpace-<env>-Edge` (`lib/edge-stack.ts`, us-east-1): the CloudFront WAF web ACL with per-IP rate limits and AWS managed rules.
+- `PhotoSpace-<env>-Edge` (`lib/edge-stack.ts`, us-east-1): the CloudFront WAF web ACL with per-IP rate limits (sign-in, the gallery and inquiry visitor APIs, everything) and AWS managed rules.
 
 Once per account: `PhotoSpace-GitHubDeploy` (`lib/github-deploy-stack.ts`), the role that the GitHub `Deploy` workflow assumes through OIDC.
 
