@@ -1,0 +1,22 @@
+package com.photospace.audit;
+
+/** The recorded kinds of change. Stored by name, so new ones can be added without a migration. */
+public enum AuditAction {
+    SESSION_STATUS_CHANGED,
+    TASK_CREATED,
+    TASK_UPDATED,
+    TASK_COMPLETED,
+    TASK_REOPENED,
+    TASK_DELETED,
+    AUTOMATION_RULE_CREATED,
+    AUTOMATION_RULE_UPDATED,
+    AUTOMATION_RUN_SUCCEEDED,
+    AUTOMATION_RUN_FAILED,
+    AUTOMATION_RUN_RETRIED,
+    GALLERY_PUBLISHED,
+    GALLERY_UNPUBLISHED,
+    SHARE_LINK_CREATED,
+    SHARE_LINK_REVOKED,
+    CONTENT_DRAFT_APPROVED,
+    CONTENT_DRAFT_UNAPPROVED
+}

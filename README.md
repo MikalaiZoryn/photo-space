@@ -117,6 +117,16 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `POST /api/workspaces/{id}/content/batches/{batchId}/retry`, `…/regenerate` | Members. Retry runs a `FAILED` batch again; regenerate creates a new batch from the same input (201). |
 | `GET`, `PUT /api/workspaces/{id}/content/drafts/{draftId}` | Members. `GET` returns `{draft, versions}`. `PUT {version, draft: {caption, callToAction, hashtags}}` saves a new version. |
 | `POST /api/workspaces/{id}/content/drafts/{draftId}/status` | Members. `{version, status: "APPROVED" \| "DRAFT"}`; approves exactly that version. |
+| `GET /api/workspaces/{id}/tasks?status=&clientId=&sessionId=&assigneeId=&overdue=false&page=0&size=25` | Members. Open tasks first, then by due date (undated last). `overdue=true` keeps open tasks due before today in the workspace time zone. |
+| `POST /api/workspaces/{id}/tasks` | Members. `{title, description, dueDate, clientId, sessionId, assigneeId}`. New tasks are `OPEN`. |
+| `GET`, `PUT`, `DELETE /api/workspaces/{id}/tasks/{taskId}` | Members. `PUT` takes `{version, task: {…}}`; `DELETE` returns 204. |
+| `POST /api/workspaces/{id}/tasks/{taskId}/status` | Members. `{status: "DONE" \| "OPEN"}`. Idempotent. |
+| `GET /api/workspaces/{id}/automation/rules` | Members. The workspace's rules, oldest first. |
+| `POST /api/workspaces/{id}/automation/rules`, `PUT …/rules/{ruleId}` | Owners (members get 403). `{triggerStatus, taskTitle, dueInDays, enabled}`; `PUT` takes `{version, rule: {…}}`. |
+| `GET /api/workspaces/{id}/automation/runs?status=&page=0&size=25` | Members. Rule runs, newest first, with the created `taskId`, or the attempt count and last problem while pending. |
+| `POST /api/workspaces/{id}/automation/runs/{runId}/retry` | Members. Starts a `FAILED` run again (409 otherwise). |
+| `GET /api/workspaces/{id}/jobs?status=&page=0&size=25` | Owners. Background jobs with status, attempts, and a safe error summary. Read-only. |
+| `GET /api/workspaces/{id}/audit-events?targetId=&page=0&size=25` | Owners. The audit log, newest first. |
 | `GET /api/public/gallery` | Gallery visitors, with the `X-Gallery-Token` header. The gallery the link opens. |
 | `POST /api/public/gallery/photos/{assetId}/download` | Gallery visitors, with the token header and CSRF. Returns `{url, expiresAt}` when the gallery allows downloads. |
 
@@ -152,6 +162,13 @@ AI content drafts (D16):
 - A batch takes 1–10 ready photos of one session and asks for 1–5 caption options. Only the selected photos' 2048 px previews (no EXIF), the notes in the request, the session type, and the brand profile are sent. Client names and contact details never are.
 - Batch status: `PENDING` (queued, generating, or waiting for an automatic retry, with `failureReason` saying why) → `SUCCEEDED` or `FAILED`. Rate limits, timeouts, and unusable answers are retried up to 5 times with backoff; refusals, rejected requests, and setup problems fail at once. `…/retry` starts a failed batch again.
 - Drafts are proposals. Each edit is a new version; approval names the version, and editing makes the draft a draft again. Each draft lists `checks`: handles, links, emails, phone numbers, and prices that are not in your notes or brand profile. Nothing is ever posted: copy an approved draft into Instagram yourself.
+
+Tasks, automation, and the audit log (D17):
+
+- `dueDate` is a calendar date in the workspace time zone (`2026-11-07`). Tasks link to an optional client, session, and assignee of the same workspace. As with sessions, a task can keep a link to an archived client or session but cannot be newly linked to one. Removing a member unassigns their tasks. Tasks are deleted, not archived.
+- One rule kind exists: when a session changes to `triggerStatus` (`BOOKED`, `COMPLETED`, `DELIVERED`, or `CANCELLED`), create a task titled `taskTitle`, due `dueInDays` (0–365) days after the change, linked to the session and its client. Rules are disabled, not deleted.
+- A rule fires at most once per session, however often the session reaches that status. The run is recorded in the transaction of the status change and carried out by a background job. The job creates the task once, even if it runs twice. A run that keeps failing becomes `FAILED` after 5 attempts and can be retried.
+- Audited: session status changes, task changes, rule changes, run outcomes and retries, gallery publishing, share links, and draft approvals. Each event has the actor (none for the system), the target, a short code-built detail (never user text, tokens, or URLs), and the correlation ID.
 
 ### Clients and sessions: a quick manual check
 
@@ -196,6 +213,19 @@ With the stack running, dev sign-in, and a session with a few ready photos (the 
 5. Reload the page: the drafts and approvals are still there. **Regenerate** creates a new batch from the same photos and notes.
 6. To see a failure, restart the backend with `CONTENT_PROVIDER=anthropic ANTHROPIC_API_KEY=invalid`. A new batch fails with "AI generation is not set up correctly…". Restart without them, and **Retry** produces drafts.
 7. In another user's window, the batch URL shows "not found".
+
+### Tasks and automation: a quick manual check
+
+With the stack running and dev sign-in:
+
+1. Open **Automation** and **Add rule**: when a session is marked **Booked**, create "Send the contract", due after 2 days.
+2. Create a session with a start time and **Mark booked**. A few seconds later, the session's **Tasks** panel shows "Send the contract", due two days from today, marked **Automated**. **Automation → Recent runs** shows "Task created".
+3. Cancel the session, reopen it as an inquiry, and book it again. No second task appears: the rule fires once per session.
+4. Tick the task's checkbox to complete it. On **Tasks**, switch **Show** to **Done** to find it again. **New task** creates a manual task with a due date and assignee.
+5. **Activity** lists the rule, the status changes, the task created by "Automation", the run, and the completion.
+6. In another user's window, the task, automation, and activity URLs show "not found".
+
+To see a failed run, block task inserts for a moment: `docker compose exec postgres psql -U photospace -c "ALTER TABLE tasks ADD CONSTRAINT block_tasks CHECK (false) NOT VALID"`. Book another session: after 5 attempts, spread over 4 to 8 minutes, the run shows **Failed**, and owners see the job under **Failed background jobs**. Remove the block with `... -c "ALTER TABLE tasks DROP CONSTRAINT block_tasks"` and choose **Retry**.
 
 ### Health endpoints
 

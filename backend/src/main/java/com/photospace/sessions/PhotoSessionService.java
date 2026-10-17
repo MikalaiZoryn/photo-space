@@ -1,5 +1,8 @@
 package com.photospace.sessions;
 
+import com.photospace.audit.AuditAction;
+import com.photospace.audit.AuditService;
+import com.photospace.audit.AuditTarget;
 import com.photospace.clients.ClientService;
 import com.photospace.clients.ClientService.ClientSummary;
 import com.photospace.shared.paging.PageQuery;
@@ -19,9 +22,13 @@ import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * A workspace's photography sessions. Every query is scoped by the verified workspace. Times are stored as UTC
  * instants and converted from and to the workspace time zone at this boundary. Status changes go only through
- * {@link #changeStatus}, which enforces {@link SessionStatus}'s transitions.
+ * {@link #changeStatus}, which enforces {@link SessionStatus}'s transitions, audits the change, and publishes
+ * {@link SessionStatusChanged} in the same transaction.
  */
 @Service
 public class PhotoSessionService {
@@ -41,11 +49,16 @@ public class PhotoSessionService {
     private final JdbcClient jdbc;
     private final WorkspaceService workspaces;
     private final ClientService clients;
+    private final AuditService audit;
+    private final ApplicationEventPublisher events;
 
-    public PhotoSessionService(JdbcClient jdbc, WorkspaceService workspaces, ClientService clients) {
+    public PhotoSessionService(JdbcClient jdbc, WorkspaceService workspaces, ClientService clients, AuditService audit,
+            ApplicationEventPublisher events) {
         this.jdbc = jdbc;
         this.workspaces = workspaces;
         this.clients = clients;
+        this.audit = audit;
+        this.events = events;
     }
 
     /** Creates an inquiry. Booking it is a separate status change. */
@@ -169,6 +182,10 @@ public class PhotoSessionService {
                 .param("id", sessionId)
                 .param("workspaceId", workspace.workspaceId())
                 .update();
+        audit.record(workspace, AuditAction.SESSION_STATUS_CHANGED, AuditTarget.SESSION, sessionId,
+                current.status() + " to " + target);
+        events.publishEvent(new SessionStatusChanged(workspace.workspaceId(), sessionId, current.clientId(),
+                current.status(), target, workspace.userId(), Instant.now()));
         return get(workspace, sessionId);
     }
 
@@ -200,8 +217,26 @@ public class PhotoSessionService {
     /** A session of this workspace, archived or not. Empty for unknown IDs and other workspaces' sessions alike. */
     @Transactional(readOnly = true)
     public Optional<SessionSummary> findSummary(WorkspaceContext workspace, UUID sessionId) {
-        return find(workspace, sessionId, false)
-                .map(row -> new SessionSummary(row.id(), row.title(), row.sessionType(), row.archivedAt() != null));
+        return find(workspace, sessionId, false).map(PhotoSessionService::summary);
+    }
+
+    private static SessionSummary summary(SessionRow row) {
+        return new SessionSummary(row.id(), row.title(), row.sessionType(), row.archivedAt() != null);
+    }
+
+    /** Summaries of this workspace's sessions among {@code sessionIds}; other IDs are left out. */
+    @Transactional(readOnly = true)
+    public Map<UUID, SessionSummary> summaries(WorkspaceContext workspace, Collection<UUID> sessionIds) {
+        if (sessionIds.isEmpty()) {
+            return Map.of();
+        }
+        return jdbc.sql("SELECT " + COLUMNS + " FROM photo_sessions WHERE workspace_id = :workspaceId AND id IN (:ids)")
+                .param("workspaceId", workspace.workspaceId())
+                .param("ids", List.copyOf(sessionIds))
+                .query(PhotoSessionService::sessionRow)
+                .stream()
+                .map(PhotoSessionService::summary)
+                .collect(Collectors.toMap(SessionSummary::id, Function.identity()));
     }
 
     /**

@@ -1098,6 +1098,105 @@ with no behavior, API, or routing changes. Decision: D15.
     -   No audit log of approvals yet beyond `approved_by` and
         `approved_at` (the `audit` module is not built).
 
-### Milestone 7: next
+### Milestone 7: done (2026-10-16)
 
-Tasks and deterministic workflows.
+-   **Schema:** `V8__tasks_automation_audit.sql` adds `automation_rules`
+    (one kind: trigger status, task title, days until due, enabled),
+    `automation_runs` (unique per rule and session; task title, due
+    date, and client fixed when the rule fires; status, run count, safe
+    failure reason), `tasks` (composite foreign keys to the client,
+    session, and member; unique `automation_run_id`), and
+    `audit_events`.
+-   **Tasks** (`tasks` module): CRUD with optimistic locking, an
+    idempotent `…/status` (`OPEN`, `DONE`), delete, and filters by
+    status, client, session, assignee, and overdue (computed in the
+    workspace time zone). Linked clients, sessions, and assignees must
+    belong to the workspace; archived ones cannot be newly linked.
+-   **Automation** (`automation` module, D17): a session status change
+    publishes `SessionStatusChanged` in its transaction; the listener
+    inserts one run per matching enabled rule and queues a
+    `run-automation` job through the existing job outbox (D12). The job
+    creates the task once (`ON CONFLICT` on the run) and ends the run.
+    After 5 failed attempts the run is `FAILED`; members can retry it.
+    Owners create and change rules. No AI is involved.
+-   **Failed jobs:** `GET …/jobs` (owners, read-only) lists background
+    jobs with attempts and safe error summaries. Runs show their job's
+    attempt count and last error while pending.
+-   **Audit** (`audit` module): `AuditService.record` in the caller's
+    transaction for session status changes, task changes, rule changes,
+    run outcomes and retries, gallery publish and unpublish, share link
+    creation and revocation, and content draft approval and withdrawal
+    (closing the Milestone 6 gap). `GET …/audit-events` is for owners.
+-   **Frontend:** a **Tasks** page (Open/Done/All, assignee, overdue
+    filters; checkbox to complete), new and edit task pages (due date,
+    assignee, client picker, session link, two-step delete), a **Tasks**
+    panel on each session (reloads 4 seconds after a status change to
+    pick up rule tasks), an **Automation** page (rules, recent runs with
+    Retry and an "Open task" link, failed background jobs for owners),
+    and an **Activity** page for owners. No new dependencies.
+-   **Docs:** D17; ARCHITECTURE §6 (tasks, automation, audit tables);
+    README (API, rules, manual check).
+-   **Verified locally on 2026-10-16:**
+    -   `cd backend && ./mvnw verify`: 58 unit tests and 106 integration
+        tests passed.
+        -   `AutomationIT` (5): a COMPLETED rule creates one task, linked
+            to the session and client, due in the workspace time zone; a
+            repeated status change, a duplicate `SessionStatusChanged`
+            event, and a re-delivered job (attempt 2) leave one run and
+            one task; disabled rules and other statuses do not fire, and
+            cancelling and re-booking does not fire a rule twice; with
+            task inserts failing (a test trigger), the run fails after 3
+            attempts with a safe reason, the job is listed as failed
+            with a class-name error, retry (`run` 2) creates the task,
+            and a second retry gets 409; system events have no actor;
+            rule validation, optimistic locking, owner-only writes,
+            owner-only jobs and audit log; cross-workspace denial on
+            rules, runs, retry, jobs, and audit events, and another
+            workspace's status changes never fire these rules.
+        -   `TasksIT` (5): CRUD, ignored client-sent status and source,
+            stale-version 409, idempotent completion, delete, audit
+            trail per action; filters and ordering, overdue in
+            Europe/Warsaw, done tasks never overdue; validation of
+            fields and of foreign or archived links; members manage
+            tasks, and removing a member unassigns them; cross-workspace
+            denial on every route with no side effects.
+        -   `GalleriesIT` and `ContentIT` now check the audit events of
+            publishing, share links (no token in any event), and draft
+            approvals. `BackendApplicationIT` expects V8.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: 80 tests passed (6 new in `Tasks.test.tsx`, 4 in
+        `Automation.test.tsx`, new routes in `routing.test.ts`), lint
+        clean, build succeeded (JS about 126 kB gzipped).
+    -   Browser run in Chrome (Compose services, `spring-boot:test-run
+        -Dspring-boot.run.profiles=compose-db`, Vite on :5173, the
+        browser still signed in from an earlier Google sign-in): V8
+        migrated on the existing database. In a new workspace
+        (America/Los_Angeles), added a "Booked → Send the contract, due
+        2 days" rule, created a session with a start time, and marked
+        it booked. The task appeared on **Tasks** as "Due Oct 18, 2026 ·
+        M7 test session" with **Automated**, and the run showed "Task
+        created" with an "Open task" link. Completed the task from the
+        session panel. **Activity** listed the rule, the status change,
+        the task created by "Automation", the run, and the completion.
+        No browser console errors. The backend log had IDs only.
+    -   Found and fixed during the browser run: the session's task panel
+        reloaded before the job had created the task. It now reloads
+        again 4 seconds later (covered by a test).
+-   **Known gaps:**
+    -   The failure and retry path was verified by `AutomationIT` only,
+        not in the browser.
+    -   Only one rule kind, firing once per session. No rules for other
+        events (gallery published, date reached), and no scheduled
+        reminders for due dates.
+    -   Tasks have no comments, attachments, recurrence, or
+        notifications. Assignment is limited to existing members, and
+        inviting members is still not built.
+    -   The audit log has no retention policy, export, or filters in the
+        UI beyond paging. Workspace creation, client, and session field
+        edits are not audited.
+    -   The job log says "succeeded" for jobs whose feature recorded a
+        permanent failure (unchanged from Milestones 4 and 6).
+
+### Milestone 8: next
+
+AWS deployment and operational hardening.

@@ -194,6 +194,16 @@ class GalleriesIT {
         assertThat(alice.get(galleries + "/" + galleryId + "/links").<List<String>>json("$.items[*].state"))
                 .containsExactlyInAnyOrder("ACTIVE", "EXPIRED", "REVOKED");
         assertThat(view(token).status()).as("the other links are unaffected").isEqualTo(200);
+
+        // Publishing and links are audited; the repeated revoke is not, and no event holds a token.
+        List<Map<String, Object>> events = jdbc.queryForList("""
+                SELECT action, detail FROM audit_events WHERE workspace_id = ?::uuid ORDER BY created_at, id""",
+                aliceWorkspace);
+        assertThat(events).extracting(e -> e.get("action")).containsExactly("GALLERY_PUBLISHED",
+                "SHARE_LINK_CREATED", "SHARE_LINK_CREATED", "SHARE_LINK_CREATED", "GALLERY_UNPUBLISHED",
+                "GALLERY_PUBLISHED", "SHARE_LINK_REVOKED");
+        assertThat(events).extracting(e -> e.get("detail")).contains("valid 7 days");
+        assertThat(events.toString()).doesNotContain(token, revokedToken, expiringToken);
     }
 
     @Test

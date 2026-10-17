@@ -97,8 +97,14 @@ public class WorkspaceService {
     /** The workspace's time zone, in which session times are entered and shown. */
     @Transactional(readOnly = true)
     public ZoneId zone(WorkspaceContext workspace) {
+        return zone(workspace.workspaceId());
+    }
+
+    /** The same, for work that runs without a signed-in member, such as automation. */
+    @Transactional(readOnly = true)
+    public ZoneId zone(UUID workspaceId) {
         return jdbc.sql("SELECT timezone FROM workspaces WHERE id = :workspaceId")
-                .param("workspaceId", workspace.workspaceId())
+                .param("workspaceId", workspaceId)
                 .query(String.class)
                 .optional()
                 .map(ZoneId::of)

@@ -189,8 +189,13 @@ Suggested tables (fields are indicative; refine during implementation):
 -   `gallery_access_events`: link ID, kind (`VIEW`, `DOWNLOAD`),
     downloaded asset ID, timestamp. No visitor data (IP address, user
     agent).
--   `tasks`: `id`, `workspace_id`, optional client/session links, title,
-    description, due date, status, assignee, source, timestamps.
+-   `tasks`: `id`, `workspace_id`, optional client/session links
+    (composite foreign keys), title, description, due date (a calendar
+    date in the workspace time zone), status (`OPEN`, `DONE`), optional
+    assignee (composite foreign key to `workspace_members`), source
+    (`MANUAL`, `AUTOMATION`), the creating automation run (unique),
+    completion time and user, `version`, timestamps. (Implemented in
+    Milestone 7; see D17.)
 -   `brand_profiles`: one per workspace: voice, audience, preferences,
     words to avoid, version. (Implemented in Milestone 6; see D16.)
 -   `content_batches`: `id`, `workspace_id`, `session_id` (composite
@@ -213,16 +218,24 @@ Suggested tables (fields are indicative; refine during implementation):
     is implemented; minimize retained content and store provider IDs.
 -   `calendar_events`: add when internal calendar behavior is needed.
 -   `automation_rules`: only for defined, supported rules initially; do
-    not build an arbitrary workflow language prematurely.
--   `automation_runs`: trigger, status, attempts, error details,
-    start/end timestamps, approval references.
+    not build an arbitrary workflow language prematurely. Milestone 7
+    has one kind: trigger session status, task title, days until due,
+    enabled flag, `version`. (See D17.)
+-   `automation_runs`: rule, session, and client; the task title and due
+    date fixed when the rule fired; status (`PENDING`, `SUCCEEDED`,
+    `FAILED`), run count, safe failure reason, triggering user, start
+    and end timestamps. Unique per rule and session. Attempts and the
+    last error live on the run's `background_jobs` rows. Approval
+    references come with rules that need approval. (Implemented in
+    Milestone 7; see D17.)
 -   `background_jobs` or equivalent job records: job type, entity
     reference, status, idempotency key, attempts, timestamps, safe error
     summary. (Implemented in Milestone 4 as `background_jobs`, with the
     next attempt time, lease, dispatch time, and correlation ID; see
     D12.)
 -   `audit_events`: actor, workspace, action, target, timestamp,
-    correlation ID, safe metadata.
+    correlation ID, safe metadata. (Implemented in Milestone 7 with a
+    short code-built `detail` text as the safe metadata; see D17.)
 
 Use foreign keys and constraints. Define deletion/retention behavior for
 related records and files. Avoid logging full email bodies, access

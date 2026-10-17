@@ -2,6 +2,9 @@ package com.photospace.content;
 
 import com.photospace.assets.AssetService;
 import com.photospace.assets.AssetService.AssetView;
+import com.photospace.audit.AuditAction;
+import com.photospace.audit.AuditService;
+import com.photospace.audit.AuditTarget;
 import com.photospace.content.ContentValidator.ValidatedContent;
 import com.photospace.jobs.JobService;
 import com.photospace.sessions.PhotoSessionService;
@@ -66,15 +69,17 @@ class ContentService {
     private final JobService jobs;
     private final BrandProfileService brands;
     private final ContentProperties properties;
+    private final AuditService audit;
 
     ContentService(JdbcClient jdbc, PhotoSessionService sessions, AssetService assets, JobService jobs,
-            BrandProfileService brands, ContentProperties properties) {
+            BrandProfileService brands, ContentProperties properties, AuditService audit) {
         this.jdbc = jdbc;
         this.sessions = sessions;
         this.assets = assets;
         this.jobs = jobs;
         this.brands = brands;
         this.properties = properties;
+        this.audit = audit;
     }
 
     /** Records the request and queues its generation. Nothing is sent to the provider in this request. */
@@ -304,6 +309,8 @@ class ContentService {
                 .param("id", draftId)
                 .param("workspaceId", workspace.workspaceId())
                 .update();
+        audit.record(workspace, approve ? AuditAction.CONTENT_DRAFT_APPROVED : AuditAction.CONTENT_DRAFT_UNAPPROVED,
+                AuditTarget.CONTENT_DRAFT, draftId, "version " + current.version());
         return findDraft(workspace.workspaceId(), draftId, false).orElseThrow();
     }
 
