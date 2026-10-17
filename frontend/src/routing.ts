@@ -17,6 +17,11 @@ export type Route =
   | { page: 'gallery'; id: string }
   | { page: 'content' }
   | { page: 'contentBatch'; id: string }
+  | { page: 'tasks' }
+  | { page: 'taskNew'; sessionId: string | null }
+  | { page: 'taskEdit'; id: string }
+  | { page: 'automation' }
+  | { page: 'activity' }
   | { page: 'members' }
 
 export function parseRoute(hash: string): Route {
@@ -41,6 +46,13 @@ export function parseRoute(hash: string): Route {
     if (id === 'batches' && action) return { page: 'contentBatch', id: action }
     return { page: 'content' }
   }
+  if (section === 'tasks') {
+    if (id === 'new') return { page: 'taskNew', sessionId: new URLSearchParams(query).get('session') }
+    if (id && action === 'edit') return { page: 'taskEdit', id }
+    return { page: 'tasks' }
+  }
+  if (section === 'automation') return { page: 'automation' }
+  if (section === 'activity') return { page: 'activity' }
   if (section === 'members') return { page: 'members' }
   return { page: 'sessions' }
 }
@@ -58,6 +70,11 @@ export const paths = {
   gallery: (id: string) => `#/galleries/${encodeURIComponent(id)}`,
   content: () => '#/content',
   contentBatch: (id: string) => `#/content/batches/${encodeURIComponent(id)}`,
+  tasks: () => '#/tasks',
+  taskNew: (sessionId?: string) => (sessionId ? `#/tasks/new?session=${encodeURIComponent(sessionId)}` : '#/tasks/new'),
+  taskEdit: (id: string) => `#/tasks/${encodeURIComponent(id)}/edit`,
+  automation: () => '#/automation',
+  activity: () => '#/activity',
   members: () => '#/members',
 }
 

@@ -69,6 +69,10 @@ public final class ApiClient {
         return send("PUT", path, json, true);
     }
 
+    public Response delete(String path) {
+        return send("DELETE", path, null, true);
+    }
+
     /** A POST without a body, such as an archive action. */
     public Response post(String path) {
         return send("POST", path, null, true);

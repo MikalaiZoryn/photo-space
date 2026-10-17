@@ -3,6 +3,8 @@ package com.photospace.jobs;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,6 +19,8 @@ import org.springframework.stereotype.Component;
 class JobStore {
 
     private static final String JOB_COLUMNS = "id, workspace_id, job_type, subject_id, attempts, max_attempts, correlation_id";
+    private static final String VIEW_COLUMNS = """
+            id, job_type, subject_id, status, attempts, max_attempts, last_error, created_at, updated_at, finished_at""";
 
     private final JdbcClient jdbc;
 
@@ -152,6 +156,54 @@ class JobStore {
                 .param("attempt", job.attempt())
                 .param("error", safeError)
                 .update() == 1;
+    }
+
+    long count(UUID workspaceId, JobStatus status) {
+        return jdbc.sql("SELECT count(*) FROM background_jobs WHERE workspace_id = :workspaceId"
+                        + (status == null ? "" : " AND status = :status"))
+                .param("workspaceId", workspaceId)
+                .param("status", status == null ? null : status.name())
+                .query(Long.class)
+                .single();
+    }
+
+    List<JobView> list(UUID workspaceId, JobStatus status, int limit, long offset) {
+        return jdbc.sql("SELECT " + VIEW_COLUMNS + " FROM background_jobs WHERE workspace_id = :workspaceId"
+                        + (status == null ? "" : " AND status = :status")
+                        + " ORDER BY updated_at DESC, id LIMIT :limit OFFSET :offset")
+                .param("workspaceId", workspaceId)
+                .param("status", status == null ? null : status.name())
+                .param("limit", limit)
+                .param("offset", offset)
+                .query(JobStore::jobView)
+                .list();
+    }
+
+    List<JobView> latestBySubject(UUID workspaceId, Collection<UUID> subjectIds) {
+        return jdbc.sql("SELECT DISTINCT ON (subject_id) " + VIEW_COLUMNS + """
+                         FROM background_jobs
+                        WHERE workspace_id = :workspaceId AND subject_id IN (:ids)
+                        ORDER BY subject_id, created_at DESC, id DESC
+                        """)
+                .param("workspaceId", workspaceId)
+                .param("ids", subjectIds)
+                .query(JobStore::jobView)
+                .list();
+    }
+
+    private static JobView jobView(ResultSet rs, int rowNum) throws SQLException {
+        OffsetDateTime finished = rs.getObject("finished_at", OffsetDateTime.class);
+        return new JobView(
+                rs.getObject("id", UUID.class),
+                rs.getString("job_type"),
+                rs.getObject("subject_id", UUID.class),
+                JobStatus.valueOf(rs.getString("status")),
+                rs.getInt("attempts"),
+                rs.getInt("max_attempts"),
+                rs.getString("last_error"),
+                rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+                rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
+                finished == null ? null : finished.toInstant());
     }
 
     private static Job job(ResultSet rs, int rowNum) throws SQLException {

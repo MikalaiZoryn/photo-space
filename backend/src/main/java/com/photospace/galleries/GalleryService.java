@@ -2,6 +2,9 @@ package com.photospace.galleries;
 
 import com.photospace.assets.AssetService;
 import com.photospace.assets.AssetService.AssetView;
+import com.photospace.audit.AuditAction;
+import com.photospace.audit.AuditService;
+import com.photospace.audit.AuditTarget;
 import com.photospace.sessions.PhotoSessionService;
 import com.photospace.sessions.PhotoSessionService.SessionSummary;
 import com.photospace.shared.paging.PageQuery;
@@ -41,12 +44,15 @@ class GalleryService {
     private final PhotoSessionService sessions;
     private final AssetService assets;
     private final GalleryProperties properties;
+    private final AuditService audit;
 
-    GalleryService(JdbcClient jdbc, PhotoSessionService sessions, AssetService assets, GalleryProperties properties) {
+    GalleryService(JdbcClient jdbc, PhotoSessionService sessions, AssetService assets, GalleryProperties properties,
+            AuditService audit) {
         this.jdbc = jdbc;
         this.sessions = sessions;
         this.assets = assets;
         this.properties = properties;
+        this.audit = audit;
     }
 
     /** Creates an empty draft gallery for a session that is not archived. */
@@ -176,6 +182,9 @@ class GalleryService {
                 .param("id", galleryId)
                 .param("workspaceId", workspace.workspaceId())
                 .update();
+        audit.record(workspace,
+                target == GalleryStatus.PUBLISHED ? AuditAction.GALLERY_PUBLISHED : AuditAction.GALLERY_UNPUBLISHED,
+                AuditTarget.GALLERY, galleryId, null);
         return get(workspace, galleryId);
     }
 

@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CalendarDays, Images, Plus, Sparkles, UserCog, Users } from 'lucide-react'
+import { CalendarDays, History, Images, ListChecks, Plus, Sparkles, UserCog, Users, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { ActivityPage } from './activity/ActivityPage.tsx'
+import { AutomationPage } from './automation/AutomationPage.tsx'
 import { ClientDetail, EditClient, NewClient } from './clients/ClientDetail.tsx'
 import { ClientsPage } from './clients/ClientsPage.tsx'
 import { BatchPage } from './content/BatchPage.tsx'
@@ -15,6 +17,7 @@ import { listMembers, listWorkspaces, type Workspace } from './api/workspaces.ts
 import { navigate, paths, useRoute, type Route } from './routing.ts'
 import { EditSession, NewSession, SessionDetail } from './sessions/SessionDetail.tsx'
 import { SessionsPage } from './sessions/SessionsPage.tsx'
+import { EditTask, NewTask, TasksPage } from './tasks/TasksPage.tsx'
 import { ErrorAlert, Loading } from './ui/Feedback.tsx'
 import { LoadError } from './ui/LoadError.tsx'
 import { PageHeader } from './ui/PageHeader.tsx'
@@ -181,14 +184,22 @@ function WorkspaceHome({
       ? 'galleries'
       : route.page.startsWith('content')
         ? 'content'
-        : route.page === 'members'
-        ? 'members'
-        : 'sessions'
+        : route.page.startsWith('task')
+          ? 'tasks'
+          : route.page === 'automation' || route.page === 'activity' || route.page === 'members'
+            ? route.page
+            : 'sessions'
   const nav: NavItem[] = [
     { href: paths.sessions(), label: 'Sessions', icon: CalendarDays, current: section === 'sessions' },
+    { href: paths.tasks(), label: 'Tasks', icon: ListChecks, current: section === 'tasks' },
     { href: paths.clients(), label: 'Clients', icon: Users, current: section === 'clients' },
     { href: paths.galleries(), label: 'Galleries', icon: Images, current: section === 'galleries' },
     { href: paths.content(), label: 'Content', icon: Sparkles, current: section === 'content' },
+    { href: paths.automation(), label: 'Automation', icon: Workflow, current: section === 'automation' },
+    // The audit log is for owners; the server refuses it to members anyway.
+    ...(workspace.role === 'OWNER'
+      ? [{ href: paths.activity(), label: 'Activity', icon: History, current: section === 'activity' }]
+      : []),
     { href: paths.members(), label: 'Members', icon: UserCog, current: section === 'members' },
   ]
 
@@ -230,6 +241,16 @@ function RoutedPage({ workspace, route }: { workspace: Workspace; route: Route }
       return <ContentPage workspaceId={workspaceId} timezone={timezone} />
     case 'contentBatch':
       return <BatchPage key={route.id} workspaceId={workspaceId} batchId={route.id} timezone={timezone} />
+    case 'tasks':
+      return <TasksPage workspaceId={workspaceId} timezone={timezone} />
+    case 'taskNew':
+      return <NewTask key={route.sessionId} workspaceId={workspaceId} sessionId={route.sessionId} />
+    case 'taskEdit':
+      return <EditTask key={route.id} workspaceId={workspaceId} taskId={route.id} timezone={timezone} />
+    case 'automation':
+      return <AutomationPage workspaceId={workspaceId} timezone={timezone} role={workspace.role} />
+    case 'activity':
+      return <ActivityPage workspaceId={workspaceId} timezone={timezone} />
     case 'members':
       return <MembersPage workspace={workspace} />
   }

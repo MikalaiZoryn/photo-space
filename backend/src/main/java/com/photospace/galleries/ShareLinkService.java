@@ -1,5 +1,8 @@
 package com.photospace.galleries;
 
+import com.photospace.audit.AuditAction;
+import com.photospace.audit.AuditService;
+import com.photospace.audit.AuditTarget;
 import com.photospace.galleries.GalleryService.GalleryRow;
 import com.photospace.shared.paging.PageQuery;
 import com.photospace.shared.paging.PageView;
@@ -34,11 +37,13 @@ class ShareLinkService {
     private final JdbcClient jdbc;
     private final GalleryService galleries;
     private final GalleryProperties properties;
+    private final AuditService audit;
 
-    ShareLinkService(JdbcClient jdbc, GalleryService galleries, GalleryProperties properties) {
+    ShareLinkService(JdbcClient jdbc, GalleryService galleries, GalleryProperties properties, AuditService audit) {
         this.jdbc = jdbc;
         this.galleries = galleries;
         this.properties = properties;
+        this.audit = audit;
     }
 
     /**
@@ -66,6 +71,7 @@ class ShareLinkService {
                 .param("userId", workspace.userId())
                 .query(UUID.class)
                 .single();
+        audit.record(workspace, AuditAction.SHARE_LINK_CREATED, AuditTarget.SHARE_LINK, id, "valid " + validDays + " days");
         return new CreatedLink(get(workspace, galleryId, id), token);
     }
 
@@ -92,7 +98,7 @@ class ShareLinkService {
     /** Stops the link from working, for good. Revoking a revoked link changes nothing. */
     @Transactional
     LinkView revoke(WorkspaceContext workspace, UUID galleryId, UUID linkId) {
-        jdbc.sql("""
+        int revoked = jdbc.sql("""
                         UPDATE gallery_share_links SET revoked_at = now(), revoked_by = :userId
                          WHERE id = :id AND workspace_id = :workspaceId AND gallery_id = :galleryId AND revoked_at IS NULL
                         """)
@@ -101,6 +107,9 @@ class ShareLinkService {
                 .param("workspaceId", workspace.workspaceId())
                 .param("galleryId", galleryId)
                 .update();
+        if (revoked == 1) {
+            audit.record(workspace, AuditAction.SHARE_LINK_REVOKED, AuditTarget.SHARE_LINK, linkId, null);
+        }
         return get(workspace, galleryId, linkId);
     }
 

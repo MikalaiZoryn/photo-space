@@ -158,6 +158,13 @@ class ContentIT {
 
         assertThat(setStatus(draft, 3, "APPROVED").<String>json("$.status")).isEqualTo("APPROVED");
         assertThat(setStatus(draft, 3, "DRAFT").<Integer>json("$.approvedVersion")).isNull();
+        assertThat(jdbc.queryForList("""
+                        SELECT action || ' ' || detail FROM audit_events
+                         WHERE target_id = ?::uuid AND actor_id IS NOT NULL ORDER BY created_at, id""",
+                String.class, draft))
+                .as("each approval and withdrawal is audited with its version, the idempotent repeat is not")
+                .containsExactly("CONTENT_DRAFT_APPROVED version 2", "CONTENT_DRAFT_APPROVED version 3",
+                        "CONTENT_DRAFT_UNAPPROVED version 3");
 
         Response history = alice.get(drafts);
         assertThat(history.<List<Integer>>json("$.versions[*].version")).containsExactly(3, 2, 1);

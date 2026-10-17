@@ -23,3 +23,8 @@ export function formatDate(instant: string, timeZone: string, locale?: string): 
 export function toInputValue(local: string | null): string {
   return local ? local.slice(0, 16) : ''
 }
+
+/** A calendar date ("2026-11-07"), such as a task's due date, formatted without any time zone shift. */
+export function formatDay(date: string, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`))
+}

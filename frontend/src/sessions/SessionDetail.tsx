@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getClient, summaryOf } from '../api/clients.ts'
 import { SessionContent } from '../content/SessionContent.tsx'
 import { SessionGalleries } from '../galleries/SessionGalleries.tsx'
+import { SessionTasks } from '../tasks/SessionTasks.tsx'
 import {
   changeSessionStatus,
   getSession,
@@ -25,6 +26,9 @@ import { SessionPhotos } from './SessionPhotos.tsx'
 import { statusActions, statusLabels, statusTones } from './status.ts'
 
 type Props = { workspaceId: string; sessionId: string }
+
+/** Rule tasks are created by a background job, usually within a few seconds of the status change. */
+const RULE_TASK_DELAY_MS = 4000
 
 export function SessionDetail({ workspaceId, sessionId }: Props) {
   const session = useLoad((signal) => getSession(workspaceId, sessionId, signal), [workspaceId, sessionId])
@@ -111,6 +115,10 @@ function SessionView({
 }) {
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  // Bumped after a status change: at once, and again once automation rules have had time to add their tasks.
+  const [tasksVersion, setTasksVersion] = useState(0)
+  const tasksTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(tasksTimer.current), [])
   const archived = session.archivedAt !== null
 
   async function run(action: () => Promise<PhotoSession>, description: string) {
@@ -125,8 +133,12 @@ function SessionView({
     }
   }
 
-  const changeStatus = (status: SessionStatus) =>
-    run(() => changeSessionStatus(workspaceId, session.id, status), 'change the status')
+  const changeStatus = async (status: SessionStatus) => {
+    await run(() => changeSessionStatus(workspaceId, session.id, status), 'change the status')
+    setTasksVersion((n) => n + 1)
+    clearTimeout(tasksTimer.current)
+    tasksTimer.current = setTimeout(() => setTasksVersion((n) => n + 1), RULE_TASK_DELAY_MS)
+  }
   const toggleArchived = () =>
     run(
       () => setSessionArchived(workspaceId, session.id, !archived),
@@ -207,6 +219,7 @@ function SessionView({
             <span className="whitespace-pre-wrap">{session.notes ?? '—'}</span>
           </FieldItem>
         </Fields>
+        <SessionTasks key={tasksVersion} workspaceId={workspaceId} sessionId={session.id} archived={archived} />
         <SessionPhotos workspaceId={workspaceId} sessionId={session.id} archived={archived} />
         <SessionGalleries
           workspaceId={workspaceId}
