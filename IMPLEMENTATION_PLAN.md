@@ -554,15 +554,18 @@ sequentially and keep each change small enough to review and test.
             redirected to `/?signInError`.
         -   The client secret never appeared in logs, and the
             session row held only the security context.
+        -   2026-10-16: a real Google account (a test user on an
+            External OAuth client in Testing status) signed in through
+            http://localhost:5173 with README "Option B": `.env` with
+            `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then
+            `set -a; source .env; set +a; (cd backend && ./mvnw spring-boot:run)`.
+            `/api/auth/options` listed only Google, and the
+            authorization redirect asked for `scope=openid email` with
+            state, nonce, and PKCE.
     -   Fixed during verification: Vite's string proxy shorthand sets
         `changeOrigin: true`, which made the Google redirect URI point
         at `:8080`. The proxy now keeps the `Host` header.
 -   **Known gaps:**
-    -   A real Google account sign-in has not been completed: no OAuth
-        client credentials were available here. Everything up to the
-        redirect to Google, and the callback rejection path, is
-        verified. Follow README "Option B" to verify it with real
-        credentials.
     -   Inviting members to a workspace is not built; the
         `MEMBER` role is exercised only through tests.
     -   Logs are plain text with correlation IDs. JSON structured logs
