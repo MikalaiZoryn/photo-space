@@ -1617,3 +1617,26 @@ work). Built on the branch `workspace-invitations` on top of Milestone 9.
         recording it, a second email goes out and only its link works.
     -   SES starts in the sandbox (verified recipients only) until
         production access is granted.
+
+### Out of plan: Settings page (code done 2026-10-17; no browser run)
+
+Requested by the user to shorten the sidebar. Frontend only; no API or
+schema change.
+
+-   **Sidebar:** **Inquiry form**, **Automation**, and **Members** are
+    gone; a **Settings** item (last) takes their place and stays
+    highlighted on every page it lists. **Activity** stays for owners.
+-   **Settings page** (`#/settings`, `src/settings/SettingsPage.tsx`):
+    a grid of square cards (2 columns on phones, 3 on tablets, 4 on
+    desktops) for Automation, Members, Inquiry form, and Content
+    Studio. The moved pages keep their URLs (`#/automation`,
+    `#/members`, `#/inquiry-form`, `#/branding`) and get a **Settings**
+    back link (Branding keeps its link to Inquiry form).
+-   **Content Studio** (`#/settings/content-studio`): the AI brand
+    profile, moved off **Content**. **Content** now lists only the
+    draft batches and links to Content Studio.
+-   **Verified locally on 2026-10-17:** `cd frontend && npm run lint &&
+    npm test && npm run build`: 104 tests passed (3 new in
+    `Settings.test.tsx`, 2 new routes in `routing.test.ts`, the brand
+    profile test moved to Content Studio), lint clean, build succeeded.
+-   **Not verified:** a browser run of the card grid at phone width.

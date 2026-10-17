@@ -40,6 +40,7 @@ export function AutomationPage({ workspaceId, timezone, role }: Props) {
         id="automation-heading"
         title="Automation"
         description="Rules that add tasks when a session changes status. Each rule fires at most once per session."
+        back={{ href: paths.settings(), label: 'Settings' }}
       />
       <div className="space-y-6">
         <RulesPanel workspaceId={workspaceId} owner={owner} />

@@ -27,6 +27,8 @@ export type Route =
   | { page: 'inquiry'; id: string }
   | { page: 'inquiryForm' }
   | { page: 'branding' }
+  | { page: 'settings' }
+  | { page: 'contentStudio' }
 
 export function parseRoute(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#\/?/, '').split('?')
@@ -64,6 +66,10 @@ export function parseRoute(hash: string): Route {
   if (section === 'automation') return { page: 'automation' }
   if (section === 'activity') return { page: 'activity' }
   if (section === 'members') return { page: 'members' }
+  if (section === 'settings') {
+    if (id === 'content-studio') return { page: 'contentStudio' }
+    return { page: 'settings' }
+  }
   return { page: 'sessions' }
 }
 
@@ -90,6 +96,8 @@ export const paths = {
   inquiry: (id: string) => `#/inquiries/${encodeURIComponent(id)}`,
   inquiryForm: () => '#/inquiry-form',
   branding: () => '#/branding',
+  settings: () => '#/settings',
+  contentStudio: () => '#/settings/content-studio',
 }
 
 /**
