@@ -77,7 +77,7 @@ A short record of decisions that the project documents left open. Add new entrie
   - Responses return both the UTC instants (`startsAt`, `endsAt`) and the same moments as wall-clock times in the workspace's *current* zone (`startLocal`, `endLocal`, `timezone`). The UI displays the instants with `Intl.DateTimeFormat` in that zone, never in the browser's own zone.
   - Changing the workspace time zone keeps each session's instant; only its displayed wall-clock time changes.
 - **Why:** the server owns the workspace zone, and `java.time` makes the daylight-saving policy explicit and unit-testable. The browser then needs no time zone arithmetic beyond formatting.
-- **Consequences:** future calendar sync (Milestone 10) works with the stored instants. All-day sessions aren't modelled; a session is either unscheduled or has a start time.
+- **Consequences:** future calendar sync (Milestone 11) works with the stored instants. All-day sessions aren't modelled; a session is either unscheduled or has a start time.
 
 ## D10: Record lifecycle conventions for workspace resources
 
