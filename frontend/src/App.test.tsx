@@ -13,6 +13,8 @@ function workspace(id: string, name: string) {
 }
 
 const emptyPage = () => json({ items: [], page: 0, size: 25, totalItems: 0 })
+const sessionsOnlyLayout = () =>
+  json({ widgets: [{ type: 'UPCOMING_SESSIONS', width: 'FULL' }], customized: true, version: 1, updatedAt: null })
 
 function members() {
   return json([{ userId: 'user-1', displayName: 'alice@example.com', role: 'OWNER', joinedAt: '2026-10-15T10:00:00Z' }])
@@ -86,6 +88,7 @@ describe('App', () => {
         return json(created, 201)
       },
       'GET /api/workspaces/ws-1/members': members,
+      'GET /api/workspaces/ws-1/dashboard/layout': sessionsOnlyLayout,
       'GET /api/workspaces/ws-1/sessions': emptyPage,
     })
 
@@ -98,7 +101,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
 
     expect(await screen.findByRole('heading', { name: 'Alice Studio' })).toBeTruthy()
-    expect(await screen.findByText(/No sessions yet/)).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
+    expect(await screen.findByText('No upcoming sessions.')).toBeTruthy()
     fireEvent.click(screen.getByRole('link', { name: 'Settings' }))
     fireEvent.click(await screen.findByRole('link', { name: 'Members' }))
     const memberList = await screen.findByRole('list', { name: 'Members' })
@@ -136,6 +140,7 @@ describe('App', () => {
       'GET /api/auth/options': options(null, false),
       'GET /api/health': health,
       'GET /api/workspaces': () => json([workspace('ws-1', 'Alpha'), workspace('ws-2', 'Beta')]),
+      'GET /api/workspaces/ws-1/dashboard/layout': sessionsOnlyLayout,
       'GET /api/workspaces/ws-1/sessions': emptyPage,
       'GET /api/workspaces/ws-2/sessions': emptyPage,
       'GET /api/workspaces/ws-2/clients/c-from-ws-2': notFound,
@@ -147,9 +152,9 @@ describe('App', () => {
     expect(await screen.findByText(/This client was not found/)).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-1' } })
     expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeTruthy()
-    // Record IDs in the URL belonged to the other workspace, so switching opens the sessions list.
-    expect(await screen.findByText(/No sessions yet/)).toBeTruthy()
-    expect(window.location.hash).toBe('#/sessions')
+    // Record IDs in the URL belonged to the other workspace, so switching opens the dashboard.
+    expect(await screen.findByText('No upcoming sessions.')).toBeTruthy()
+    expect(window.location.hash).toBe('#/dashboard')
     expect(window.localStorage.getItem('photospace.selectedWorkspace')).toBe('ws-1')
   })
 

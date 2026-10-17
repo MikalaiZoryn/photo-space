@@ -96,7 +96,7 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `POST /api/workspaces/{id}/clients` | Members. Creates a client: `{name, email, phone, notes}`. |
 | `GET`, `PUT /api/workspaces/{id}/clients/{clientId}` | Members. `PUT` takes `{version, client: {…}}`. |
 | `POST /api/workspaces/{id}/clients/{clientId}/archive`, `…/restore` | Members. Idempotent. |
-| `GET /api/workspaces/{id}/sessions?status=&clientId=&archived=false&page=0&size=25` | Members. Newest first, unscheduled on top. |
+| `GET /api/workspaces/{id}/sessions?status=&clientId=&archived=false&upcoming=false&page=0&size=25` | Members. Newest first, unscheduled on top. `upcoming=true` keeps inquiries and booked sessions starting from now on, soonest first. |
 | `POST /api/workspaces/{id}/sessions` | Members. Creates an inquiry: `{title, sessionType, clientId, startLocal, endLocal, location, notes}`. |
 | `GET`, `PUT /api/workspaces/{id}/sessions/{sessionId}` | Members. `PUT` takes `{version, session: {…}}`. |
 | `POST /api/workspaces/{id}/sessions/{sessionId}/status` | Members. `{status}`; only allowed transitions (409 otherwise). |
@@ -115,7 +115,7 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `POST /api/workspaces/{id}/galleries/{galleryId}/links/{linkId}/revoke` | Members. Idempotent. |
 | `GET /api/workspaces/{id}/content/settings` | Members. The AI provider (`mock` or `anthropic`), model, and limits. |
 | `GET`, `PUT /api/workspaces/{id}/content/brand-profile` | Members. `PUT` takes `{version, profile: {voice, audience, preferences, avoid}}`; version 0 before the first save. |
-| `GET /api/workspaces/{id}/content/batches?sessionId=&page=0&size=25` | Members. Generation batches, newest first, with photo, draft, and approval counts. |
+| `GET /api/workspaces/{id}/content/batches?sessionId=&toReview=false&page=0&size=25` | Members. Generation batches, newest first, with photo, draft, and approval counts. `toReview=true` keeps batches with drafts not approved yet. |
 | `POST /api/workspaces/{id}/content/batches` | Members. `{sessionId, assetIds, notes, captionCount, includeHashtags, includeCallToAction}`. Returns the `PENDING` batch; a job writes the drafts. |
 | `GET /api/workspaces/{id}/content/batches/{batchId}` | Members. `{batch, photos, carousel, drafts}`. Poll it while `PENDING`. |
 | `POST /api/workspaces/{id}/content/batches/{batchId}/retry`, `…/regenerate` | Members. Retry runs a `FAILED` batch again; regenerate creates a new batch from the same input (201). |
@@ -131,12 +131,13 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `POST /api/workspaces/{id}/automation/runs/{runId}/retry` | Members. Starts a `FAILED` run again (409 otherwise). |
 | `GET /api/workspaces/{id}/jobs?status=&page=0&size=25` | Owners. Background jobs with status, attempts, and a safe error summary. Read-only. |
 | `GET /api/workspaces/{id}/audit-events?targetId=&page=0&size=25` | Owners. The audit log, newest first. |
+| `GET`, `PUT`, `DELETE /api/workspaces/{id}/dashboard/layout` | Members, each for their own layout. `GET` returns `{widgets: [{type, width}], customized, version, updatedAt}`: the default for your role (version 0) until you save. `PUT {version, widgets}` replaces it (409 when stale, 400 for a repeated widget or `RECENT_ACTIVITY` as a member). `DELETE` goes back to the default and returns it. |
 | `GET`, `PUT /api/workspaces/{id}/branding` | Members. Defaults at version 0. `PUT` takes `{version, branding: {displayName, logoAssetId, primaryColor, accentColor, font, email, phone, description}}`. |
 | `POST /api/workspaces/{id}/branding/logo-uploads` | Members. Starts a logo upload (JPEG or PNG, up to 5 MB), like a photo upload; complete it with `…/assets/{assetId}/complete`. |
 | `GET`, `POST /api/workspaces/{id}/inquiry-form` | Members. `GET` is 404 until `POST` creates the form from the default template (201, or 200 with the existing form). |
 | `PUT /api/workspaces/{id}/inquiry-form` | Members. `{version, draft: {title, intro, confirmation, questions, service}}`. Visitors keep seeing the published version. |
 | `POST /api/workspaces/{id}/inquiry-form/publish`, `…/unpublish` | Members. `publish` takes `{version}` and snapshots the saved draft as a new version (an unchanged draft reuses the last one). Both are idempotent. |
-| `GET /api/workspaces/{id}/inquiries?status=&page=0&size=25` | Members. Newest first; without `status`, everything except `DISMISSED`. |
+| `GET /api/workspaces/{id}/inquiries?status=&open=false&page=0&size=25` | Members. Newest first; without `status`, everything except `DISMISSED`, or with `open=true` only `NEW` and `NEEDS_REVIEW`. |
 | `GET /api/workspaces/{id}/inquiries/{inquiryId}` | Members. Answers with labels, matching clients while open, and the linked client, session, and tasks. |
 | `POST /api/workspaces/{id}/inquiries/{inquiryId}/associate` | Members. `{version, clientId}` or `{version, createClient: true}`. Creates one `INQUIRY` session and one follow-up task. Repeating it is harmless. |
 | `POST /api/workspaces/{id}/inquiries/{inquiryId}/dismiss`, `…/reopen` | Members. `{version}`. Idempotent. |
@@ -261,6 +262,16 @@ With the stack running and dev sign-in:
 5. Open the first inquiry and **Link to …**: the inquiry links to the client, session, and follow-up task, and the review task is done. Open the second, **Dismiss** it, switch the **Status** filter to **Dismissed**, and **Reopen** it.
 6. To try the embed, save the snippet in an HTML file and open it from `http://localhost:8000` (`python3 -m http.server 8000`) with the snippet's URL pointing at `http://localhost:5173`. Locally there are no framing headers; deployed, only `/embed/*` can be framed.
 7. **Unpublish**: the private window shows "This form is not available", and existing inquiries stay. In another user's window, the inquiry URLs show "not found".
+
+### Dashboard: a quick manual check
+
+With the stack running and dev sign-in:
+
+1. Sign in. The app opens on **Dashboard**, the first sidebar item. An owner sees all eight widgets; a member sees all but **Recent activity**.
+2. **Customize**. Drag **My tasks** by its handle above **Upcoming sessions**. With the keyboard: Tab to a handle, press Space, use the arrow keys, and press Space again.
+3. Make a widget full width, remove one, and add it back from **Add widgets**. **Save** and reload the page: the layout stays. Open the app in another browser signed in as another member: their dashboard is unchanged.
+4. **Customize** in two tabs, save in one, then save in the other: the second explains that the dashboard changed in another window.
+5. **Customize** › **Reset to default** brings the default back.
 
 ### Invitations: a quick manual check
 

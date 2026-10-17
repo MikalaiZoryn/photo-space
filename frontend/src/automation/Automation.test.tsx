@@ -136,7 +136,7 @@ describe('Automation', () => {
       [`GET ${WS}/automation/rules`]: () => json([rule()]),
       [`GET ${WS}/automation/runs`]: () => page([]),
     })
-    render(<Workspaces userName="Bob" onSignOut={() => {}} />)
+    render(<Workspaces userId="u-2" userName="Bob" onSignOut={() => {}} />)
 
     expect(await screen.findByText('Send the gallery')).toBeTruthy()
     expect(screen.getByText('Only workspace owners can change rules.')).toBeTruthy()

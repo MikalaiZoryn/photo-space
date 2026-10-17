@@ -120,6 +120,10 @@ provider's SDK types leak into domain models.
 -   **content:** brand profile, AI generation requests, draft versions,
     approvals.
 -   **tasks:** task creation, assignment, due dates, status.
+-   **dashboard:** each member's own dashboard layout (which widgets,
+    in what order, at what width). The widgets read their data from
+    the other modules' list APIs; this module stores only the layout
+    (D21).
 -   **calendar:** internal calendar model and future provider
     synchronization.
 -   **mailbox:** Gmail connection, sync state, thread/message metadata,
@@ -183,6 +187,11 @@ Suggested tables (fields are indicative; refine during implementation):
     `SENT`, `FAILED`), send count, inviting, accepting, and revoking
     users with times; one `PENDING` row per workspace and email.
     (D20.)
+-   `dashboard_layouts`: `workspace_id`, `user_id`, `version`; one per
+    member and workspace. `dashboard_widgets`: `workspace_id`,
+    `layout_id`, widget type, position, width (`HALF`, `FULL`); each
+    widget once per layout. No row means the role's default layout.
+    (D21.)
 -   `clients`: `id`, `workspace_id`, name, email, phone, notes,
     `archived_at`, `version`, timestamps. (Implemented in Milestone 3.)
 -   `photo_sessions`: `id`, `workspace_id`, optional `client_id`

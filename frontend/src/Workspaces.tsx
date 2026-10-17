@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CalendarDays, History, Images, Inbox, ListChecks, Plus, Settings, Sparkles, Users } from 'lucide-react'
+import { CalendarDays, History, Images, Inbox, LayoutDashboard, ListChecks, Plus, Settings, Sparkles, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { ActivityPage } from './activity/ActivityPage.tsx'
@@ -9,6 +9,7 @@ import { ClientsPage } from './clients/ClientsPage.tsx'
 import { BatchPage } from './content/BatchPage.tsx'
 import { ContentPage } from './content/ContentPage.tsx'
 import { CreateWorkspaceForm } from './CreateWorkspaceForm.tsx'
+import { DashboardPage } from './dashboard/DashboardPage.tsx'
 import { GalleriesPage } from './galleries/GalleriesPage.tsx'
 import { GalleryPage } from './galleries/GalleryPage.tsx'
 import { BrandingPage } from './inquiries/BrandingPage.tsx'
@@ -35,13 +36,14 @@ import { useLoad, type Loadable } from './useLoad.ts'
 
 /** Workspace onboarding (create the first one) and selection between the user's workspaces. */
 type Props = {
+  userId: string
   userName: string
   onSignOut: () => void
   /** Shown above the page, e.g. a failed sign-out. */
   notice?: ReactNode
 }
 
-export function Workspaces({ userName, onSignOut, notice }: Props) {
+export function Workspaces({ userId, userName, onSignOut, notice }: Props) {
   const [workspaces, setWorkspaces] = useState<Loadable<Workspace[]>>({ kind: 'loading' })
   const [selectedId, setSelectedId] = useState<string | null>(readSelected)
   const [creating, setCreating] = useState(false)
@@ -64,7 +66,7 @@ export function Workspaces({ userName, onSignOut, notice }: Props) {
   function switchTo(id: string) {
     select(id)
     // Record IDs in the URL belong to the previous workspace.
-    navigate(paths.sessions())
+    navigate(paths.dashboard())
   }
 
   function created(workspace: Workspace) {
@@ -155,6 +157,7 @@ export function Workspaces({ userName, onSignOut, notice }: Props) {
     <WorkspaceHome
       key={selected.id}
       workspace={selected}
+      userId={userId}
       render={(nav, children) =>
         shell(
           <>
@@ -177,14 +180,17 @@ export function Workspaces({ userName, onSignOut, notice }: Props) {
 
 function WorkspaceHome({
   workspace,
+  userId,
   render,
 }: {
   workspace: Workspace
+  userId: string
   render: (nav: NavItem[], children: ReactNode) => ReactNode
 }) {
   const route = useRoute()
   const section = sectionOf(route)
   const nav: NavItem[] = [
+    { href: paths.dashboard(), label: 'Dashboard', icon: LayoutDashboard, current: section === 'dashboard' },
     { href: paths.sessions(), label: 'Sessions', icon: CalendarDays, current: section === 'sessions' },
     { href: paths.tasks(), label: 'Tasks', icon: ListChecks, current: section === 'tasks' },
     { href: paths.clients(), label: 'Clients', icon: Users, current: section === 'clients' },
@@ -204,7 +210,7 @@ function WorkspaceHome({
       <h2 id="workspace-heading" className="sr-only">
         {workspace.name}
       </h2>
-      <RoutedPage workspace={workspace} route={route} />
+      <RoutedPage workspace={workspace} userId={userId} route={route} />
     </section>,
   )
 }
@@ -239,14 +245,18 @@ function sectionOf(route: Route) {
     case 'inquiryForm':
     case 'branding':
       return 'settings'
+    case 'dashboard':
+      return 'dashboard'
     default:
       return 'sessions'
   }
 }
 
-function RoutedPage({ workspace, route }: { workspace: Workspace; route: Route }) {
+function RoutedPage({ workspace, userId, route }: { workspace: Workspace; userId: string; route: Route }) {
   const { id: workspaceId, timezone } = workspace
   switch (route.page) {
+    case 'dashboard':
+      return <DashboardPage workspace={workspace} userId={userId} />
     case 'sessions':
       return <SessionsPage workspaceId={workspaceId} timezone={timezone} />
     case 'session':

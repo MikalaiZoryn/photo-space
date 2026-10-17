@@ -33,9 +33,10 @@ class InquiryController {
     PageView<InquirySummary> list(
             WorkspaceContext workspace,
             @RequestParam(required = false) InquiryStatus status,
+            @RequestParam(defaultValue = "false") boolean open,
             @RequestParam(defaultValue = "0") @Min(0) @Max(PageQuery.MAX_PAGE) int page,
             @RequestParam(defaultValue = "" + PageQuery.DEFAULT_SIZE) @Min(1) @Max(PageQuery.MAX_SIZE) int size) {
-        return inquiries.list(workspace, status, new PageQuery(page, size));
+        return inquiries.list(workspace, status, open, new PageQuery(page, size));
     }
 
     @GetMapping("/{inquiryId}")

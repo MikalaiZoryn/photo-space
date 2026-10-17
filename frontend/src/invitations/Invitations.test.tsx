@@ -69,6 +69,8 @@ describe('Invitations', () => {
         return json({ ...workspace, role: 'MEMBER' })
       },
       'GET /api/workspaces': () => json(joined ? [{ ...workspace, role: 'MEMBER' }] : []),
+      'GET /api/workspaces/ws-1/dashboard/layout': () =>
+        json({ widgets: [{ type: 'UPCOMING_SESSIONS', width: 'FULL' }], customized: false, version: 0, updatedAt: null }),
       'GET /api/workspaces/ws-1/sessions': () => json({ items: [], page: 0, size: 25, totalItems: 0 }),
       'GET /api/health': health,
     })
@@ -81,9 +83,9 @@ describe('Invitations', () => {
     expect(headersOf(fetch, 'GET', '/api/invitation')['X-Invitation-Token']).toBe(TOKEN)
     fireEvent.click(screen.getByRole('button', { name: 'Accept invitation' }))
 
-    expect(await screen.findByRole('heading', { name: 'Sessions' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeTruthy()
     expect(headersOf(fetch, 'POST', '/api/invitation/accept')['X-Invitation-Token']).toBe(TOKEN)
-    expect(window.location.hash).toBe('#/sessions')
+    expect(window.location.hash).toBe('#/dashboard')
     expect(window.localStorage.getItem('photospace.selectedWorkspace')).toBe('ws-1')
     expect(window.sessionStorage.getItem('photospace.pendingInvitation')).toBeNull()
   })
@@ -184,7 +186,7 @@ describe('Invitations', () => {
       'GET /api/workspaces': () => json([{ ...workspace, role: 'MEMBER' }]),
       [`GET ${WS}/members`]: members,
     })
-    render(<Workspaces userName="carol@example.com" onSignOut={() => {}} />)
+    render(<Workspaces userId="u-3" userName="carol@example.com" onSignOut={() => {}} />)
 
     expect(await screen.findByRole('list', { name: 'Members' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Invitations' })).toBeNull()

@@ -1640,3 +1640,55 @@ schema change.
     `Settings.test.tsx`, 2 new routes in `routing.test.ts`, the brand
     profile test moved to Content Studio), lint clean, build succeeded.
 -   **Not verified:** a browser run of the card grid at phone width.
+
+### Out of plan: customizable dashboard (code done 2026-10-17; no browser run)
+
+Requested by the user ("a dashboard page similar to HoneyBook's"); it is
+not one of the numbered milestones. Built on the branch `dashboard`.
+
+-   **Navigation:** **Dashboard** (`#/dashboard`) is the first sidebar
+    item and the default page: an empty or unknown hash, switching
+    workspaces, and accepting an invitation all open it.
+-   **Widgets:** At a glance (upcoming sessions, open and overdue
+    tasks, open inquiries, and content batches to review, each linking
+    to its page), Upcoming sessions, My tasks, Open inquiries, Content
+    to review, Recent galleries, Recent activity (owners only), and
+    Quick actions (new session, client, task; copy the inquiry form
+    link while it is published). List widgets show 5 rows and a
+    **View all** link. Each widget loads its own data and shows its own
+    loading, empty, and error state.
+-   **Customizing:** **Customize** edits a draft: drag a widget by its
+    handle (pointer, touch, or keyboard), switch it between half and
+    full width, remove it, or add one from **Add widgets**. **Save**
+    stores it; **Cancel** discards it; **Reset to default** goes back to
+    the role's default.
+-   **Schema:** `V11__dashboard_layouts.sql` adds `dashboard_layouts`
+    (one per member and workspace, with `version`) and
+    `dashboard_widgets` (type, position, width; each type once per
+    layout).
+-   **Backend** (D21): new `dashboard` module with
+    `GET`/`PUT`/`DELETE /api/workspaces/{id}/dashboard/layout`, scoped
+    to the signed-in member. New list filters: sessions
+    `upcoming=true`, inquiries `open=true`, content batches
+    `toReview=true`.
+-   **Frontend:** `src/dashboard/` (`DashboardPage.tsx`, `Widgets.tsx`,
+    `catalog.ts`), `src/api/dashboard.ts`; the activity labels moved to
+    `src/activity/labels.ts` to be shared. New dependencies:
+    `@dnd-kit/core` 6.3.1, `@dnd-kit/sortable` 10.0.0,
+    `@dnd-kit/utilities` 3.2.2.
+-   **Verified locally on 2026-10-17:**
+    -   `cd backend && ./mvnw verify`: 78 unit tests and 147
+        integration tests passed. New: `DashboardIT` (role defaults,
+        save, stale save, reset, validation, one layout per member,
+        owner-only widget refused and hidden after demotion,
+        cross-workspace denial); filter tests in `PhotoSessionsIT`,
+        `InquiriesIT`, and `ContentIT`; `BackendApplicationIT` expects
+        migration 11.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: lint and typecheck clean, 112 tests passed (8
+        new in `Dashboard.test.tsx`, including a keyboard drag;
+        routing, App, and invitation tests updated for the new default
+        page), build succeeded with Vite's warning that the bundle is
+        over 500 kB (527 kB; 468 kB before).
+-   **Not verified:** a browser run (pointer and touch dragging, the
+    grid at phone width).

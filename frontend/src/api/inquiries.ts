@@ -46,10 +46,10 @@ function inquiryPath(workspaceId: string, inquiryId: string) {
   return `${inquiriesPath(workspaceId)}/${encodeURIComponent(inquiryId)}`
 }
 
-/** Without a status, every inquiry except dismissed ones. */
+/** Without a status, every inquiry except dismissed ones, or with `open` only those still to associate or dismiss. */
 export function listInquiries(
   workspaceId: string,
-  query: { status?: InquiryStatus; page?: number },
+  query: { status?: InquiryStatus; open?: boolean; page?: number; size?: number },
   signal?: AbortSignal,
 ): Promise<Page<InquirySummary>> {
   return api<Page<InquirySummary>>(withQuery(inquiriesPath(workspaceId), query), { signal })

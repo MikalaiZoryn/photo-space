@@ -3,7 +3,8 @@ import { invitationToken, parseRoute, paths, publicInquiryRoute } from './routin
 
 describe('parseRoute', () => {
   it('reads every page from the hash', () => {
-    expect(parseRoute('')).toEqual({ page: 'sessions' })
+    expect(parseRoute('')).toEqual({ page: 'dashboard' })
+    expect(parseRoute('#/dashboard')).toEqual({ page: 'dashboard' })
     expect(parseRoute('#/sessions')).toEqual({ page: 'sessions' })
     expect(parseRoute('#/sessions/new')).toEqual({ page: 'sessionNew', clientId: null })
     expect(parseRoute('#/sessions/new?client=c-1')).toEqual({ page: 'sessionNew', clientId: 'c-1' })
@@ -28,8 +29,8 @@ describe('parseRoute', () => {
     expect(parseRoute('#/settings/content-studio')).toEqual({ page: 'contentStudio' })
   })
 
-  it('falls back to sessions for unknown hashes', () => {
-    expect(parseRoute('#/nowhere')).toEqual({ page: 'sessions' })
+  it('falls back to the dashboard for unknown hashes', () => {
+    expect(parseRoute('#/nowhere')).toEqual({ page: 'dashboard' })
   })
 
   it('round-trips the paths it builds', () => {

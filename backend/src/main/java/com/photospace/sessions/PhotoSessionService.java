@@ -92,14 +92,17 @@ public class PhotoSessionService {
 
     /**
      * Active or archived sessions, optionally of one status or one client. Newest first; unscheduled sessions
-     * come first because they still need a date.
+     * come first because they still need a date. {@code upcoming} keeps only inquiries and booked sessions that
+     * start from now on, soonest first.
      */
     @Transactional(readOnly = true)
-    PageView<SessionView> list(
-            WorkspaceContext workspace, SessionStatus status, UUID clientId, boolean archived, PageQuery page) {
+    PageView<SessionView> list(WorkspaceContext workspace, SessionStatus status, UUID clientId, boolean archived,
+            boolean upcoming, PageQuery page) {
         String where = " WHERE workspace_id = :workspaceId AND archived_at IS " + (archived ? "NOT NULL" : "NULL")
                 + (status == null ? "" : " AND status = :status")
-                + (clientId == null ? "" : " AND client_id = :clientId");
+                + (clientId == null ? "" : " AND client_id = :clientId")
+                + (upcoming ? " AND status IN ('INQUIRY', 'BOOKED') AND starts_at >= now()" : "");
+        String order = upcoming ? "starts_at, id" : "starts_at DESC NULLS FIRST, created_at DESC, id";
         String statusName = status == null ? null : status.name();
 
         long total = jdbc.sql("SELECT count(*) FROM photo_sessions" + where)
@@ -109,7 +112,7 @@ public class PhotoSessionService {
                 .query(Long.class)
                 .single();
         List<SessionRow> rows = jdbc.sql("SELECT " + COLUMNS + " FROM photo_sessions" + where
-                        + " ORDER BY starts_at DESC NULLS FIRST, created_at DESC, id LIMIT :limit OFFSET :offset")
+                        + " ORDER BY " + order + " LIMIT :limit OFFSET :offset")
                 .param("workspaceId", workspace.workspaceId())
                 .param("status", statusName)
                 .param("clientId", clientId)
