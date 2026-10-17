@@ -128,6 +128,17 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `POST /api/workspaces/{id}/automation/runs/{runId}/retry` | Members. Starts a `FAILED` run again (409 otherwise). |
 | `GET /api/workspaces/{id}/jobs?status=&page=0&size=25` | Owners. Background jobs with status, attempts, and a safe error summary. Read-only. |
 | `GET /api/workspaces/{id}/audit-events?targetId=&page=0&size=25` | Owners. The audit log, newest first. |
+| `GET`, `PUT /api/workspaces/{id}/branding` | Members. Defaults at version 0. `PUT` takes `{version, branding: {displayName, logoAssetId, primaryColor, accentColor, font, email, phone, description}}`. |
+| `POST /api/workspaces/{id}/branding/logo-uploads` | Members. Starts a logo upload (JPEG or PNG, up to 5 MB), like a photo upload; complete it with `…/assets/{assetId}/complete`. |
+| `GET`, `POST /api/workspaces/{id}/inquiry-form` | Members. `GET` is 404 until `POST` creates the form from the default template (201, or 200 with the existing form). |
+| `PUT /api/workspaces/{id}/inquiry-form` | Members. `{version, draft: {title, intro, confirmation, questions, service}}`. Visitors keep seeing the published version. |
+| `POST /api/workspaces/{id}/inquiry-form/publish`, `…/unpublish` | Members. `publish` takes `{version}` and snapshots the saved draft as a new version (an unchanged draft reuses the last one). Both are idempotent. |
+| `GET /api/workspaces/{id}/inquiries?status=&page=0&size=25` | Members. Newest first; without `status`, everything except `DISMISSED`. |
+| `GET /api/workspaces/{id}/inquiries/{inquiryId}` | Members. Answers with labels, matching clients while open, and the linked client, session, and tasks. |
+| `POST /api/workspaces/{id}/inquiries/{inquiryId}/associate` | Members. `{version, clientId}` or `{version, createClient: true}`. Creates one `INQUIRY` session and one follow-up task. Repeating it is harmless. |
+| `POST /api/workspaces/{id}/inquiries/{inquiryId}/dismiss`, `…/reopen` | Members. `{version}`. Idempotent. |
+| `GET /api/public/inquiry/{slug}` | Anyone. The published form and branding. No cookies are set or read. |
+| `POST /api/public/inquiry/{slug}` | Anyone, without a CSRF token. `{idempotencyKey, answers, service, source, referrer, utm, website, elapsedMillis}`. Always 202 `{"received":true}` once valid. |
 | `GET /api/public/gallery` | Gallery visitors, with the `X-Gallery-Token` header. The gallery the link opens. |
 | `POST /api/public/gallery/photos/{assetId}/download` | Gallery visitors, with the token header and CSRF. Returns `{url, expiresAt}` when the gallery allows downloads. |
 
@@ -170,6 +181,14 @@ Tasks, automation, and the audit log (D17):
 - One rule kind exists: when a session changes to `triggerStatus` (`BOOKED`, `COMPLETED`, `DELIVERED`, or `CANCELLED`), create a task titled `taskTitle`, due `dueInDays` (0–365) days after the change, linked to the session and its client. Rules are disabled, not deleted.
 - A rule fires at most once per session, however often the session reaches that status. The run is recorded in the transaction of the status change and carried out by a background job. The job creates the task once, even if it runs twice. A run that keeps failing becomes `FAILED` after 5 attempts and can be retried.
 - Audited: session status changes, task changes, rule changes, run outcomes and retries, gallery publishing, share links, and draft approvals. Each event has the actor (none for the system), the target, a short code-built detail (never user text, tokens, or URLs), and the correlation ID.
+
+Branding, the inquiry form, and inquiries (D19):
+
+- Branding is what visitors of the inquiry pages see: a display name (the workspace name by default), a logo, primary and accent colors (`#rrggbb`), a font (`INTER`, `SYSTEM`, `SERIF`, `ROUNDED`), and optional contact email, phone, and description. There is no custom CSS, HTML, or script. The logo is processed like a photo and shown by a 10-minute URL.
+- Each workspace has one General Inquiry form. Questions have a stable `id`, a `type` (`SHORT_TEXT`, `LONG_TEXT`, `EMAIL`, `PHONE`, `DATE`, `SINGLE_CHOICE`), a label, help text, a required flag, and choices. `name` and `email` are required in every form; `phone` and `preferredDate` are optional and keep their types. An optional service selector's choice becomes the session type.
+- Visitors open `/inquiry/<slug>` or embed `/embed/inquiry/<slug>` in an iframe (fixed height; the builder shows the snippet). Both show the published version only. Unknown, draft, and unpublished slugs all get "not available".
+- A submission is checked against the published version, stored once per `idempotencyKey`, and matched by a background job: an active client with the same email (trimmed, any case) makes it `NEEDS_REVIEW`, otherwise it is `NEW`. Either way one review task is created and no client is touched. Filled-in honeypots, forms sent within 3 seconds, and bodies over 64 KB are dropped or refused.
+- Only a member links an inquiry to a client (or creates one from the answers), which also creates one unscheduled `INQUIRY` session and one follow-up task. Nothing is booked, sent, or charged. Dismissed inquiries keep their answers and can be reopened.
 
 ### Clients and sessions: a quick manual check
 
@@ -227,6 +246,18 @@ With the stack running and dev sign-in:
 6. In another user's window, the task, automation, and activity URLs show "not found".
 
 To see a failed run, block task inserts for a moment: `docker compose exec postgres psql -U photospace -c "ALTER TABLE tasks ADD CONSTRAINT block_tasks CHECK (false) NOT VALID"`. Book another session: after 5 attempts, spread over 4 to 8 minutes, the run shows **Failed**, and owners see the job under **Failed background jobs**. Remove the block with `... -c "ALTER TABLE tasks DROP CONSTRAINT block_tasks"` and choose **Retry**.
+
+### Inquiry form: a quick manual check
+
+With the stack running and dev sign-in:
+
+1. Open **Inquiry form** and **Start from the default template**. Follow the **branding** link, set a business name, colors, a font, and upload a PNG logo; **Save branding** once the logo is ready.
+2. Back on **Inquiry form**, add a question, move it up, and watch the preview follow. **Publish**. Copy the hosted URL and open it in a private window: the branded form shows without sign-in.
+3. Change the title and **Save draft**. Reloading the private window still shows the old title until you **Publish changes**.
+4. In the private window, send the form with an email that one of your clients has. Within a few seconds **Inquiries** lists it as **Possible match**, and **Tasks** has "Review inquiry from …". Send another with a new email: it is **New**.
+5. Open the first inquiry and **Link to …**: the inquiry links to the client, session, and follow-up task, and the review task is done. Open the second, **Dismiss** it, switch the **Status** filter to **Dismissed**, and **Reopen** it.
+6. To try the embed, save the snippet in an HTML file and open it from `http://localhost:8000` (`python3 -m http.server 8000`) with the snippet's URL pointing at `http://localhost:5173`. Locally there are no framing headers; deployed, only `/embed/*` can be framed.
+7. **Unpublish**: the private window shows "This form is not available", and existing inquiries stay. In another user's window, the inquiry URLs show "not found".
 
 ### Health endpoints
 

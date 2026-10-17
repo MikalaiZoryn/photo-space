@@ -74,6 +74,8 @@ Suggested backend packages/modules:
 identity/
 workspaces/
 clients/
+inquiries/
+branding/
 sessions/
 assets/
 galleries/
@@ -98,6 +100,12 @@ provider's SDK types leak into domain models.
     identity mapping.
 -   **workspaces:** workspace membership and authorization policies.
 -   **clients:** client profile and contact information.
+-   **branding:** how the public inquiry pages look: display name, logo
+    (a session-less photo asset), colors, font, contact details (D19).
+-   **inquiries:** the public General Inquiry form (draft, immutable
+    published versions, public slug), the unauthenticated submission
+    API, matching by email, and association or dismissal by a member
+    (D19).
 -   **sessions:** photography session lifecycle and relationships.
 -   **assets:** metadata, upload authorization, processing state,
     derivatives.
@@ -196,9 +204,27 @@ Suggested tables (fields are indicative; refine during implementation):
     (composite foreign keys), title, description, due date (a calendar
     date in the workspace time zone), status (`OPEN`, `DONE`), optional
     assignee (composite foreign key to `workspace_members`), source
-    (`MANUAL`, `AUTOMATION`), the creating automation run (unique),
-    completion time and user, `version`, timestamps. (Implemented in
-    Milestone 7; see D17.)
+    (`MANUAL`, `AUTOMATION`, `INQUIRY`), the creating automation run
+    (unique), completion time and user, `version`, timestamps.
+    (Implemented in Milestone 7; see D17. `INQUIRY` tasks are an
+    inquiry's review and follow-up tasks, Milestone 9.)
+-   `workspace_branding`: one per workspace: display name, logo asset
+    (composite foreign key to a session-less `photo_assets` row),
+    primary and accent hex colors, font, optional contact email, phone,
+    and description, `version`. (Milestone 9; see D19.)
+-   `public_forms`: one per workspace: random public slug, status
+    (`DRAFT`, `PUBLISHED`, `UNPUBLISHED`), draft config (JSONB),
+    published version, `version`. `public_form_versions`: immutable
+    config snapshots, numbered per form, with publisher and time.
+-   `inquiries`: form and version (composite foreign keys), status
+    (`RECEIVED`, `NEW`, `NEEDS_REVIEW`, `ASSOCIATED`, `DISMISSED`), the
+    answers by question ID (JSONB), contact name, email (and its
+    normalized form), phone, service, preferred date, source (`HOSTED`,
+    `EMBED`), referrer origin and path, UTM values, a per-form unique
+    idempotency key, and, once acted on, the client, session, review
+    and follow-up tasks, and who associated or dismissed it. A trigger
+    keeps the submitted fields unchangeable. (Milestone 9; see D19 for
+    why the config and answers are JSONB.)
 -   `brand_profiles`: one per workspace: voice, audience, preferences,
     words to avoid, version. (Implemented in Milestone 6; see D16.)
 -   `content_batches`: `id`, `workspace_id`, `session_id` (composite
@@ -304,6 +330,16 @@ helpful. Ensure orphaned uploads are cleaned up.
 Milestone 5 implements this (D14). Visitors open `#/g/<token>` in the
 SPA; the token stays in the URL fragment and is sent to the API only in
 the `X-Gallery-Token` header of `/api/public/gallery` requests.
+
+### Public inquiry pages
+
+The other unauthenticated surface (Milestone 9, D19). `/inquiry/<slug>`
+and `/embed/inquiry/<slug>` render the published version of a
+workspace's inquiry form through `/api/public/inquiry/{slug}`, which
+runs without sessions, CSRF tokens, or cookies. The slug is public by
+design; it selects one published form and nothing else. Only `/embed/*`
+may be framed by other sites. A submission becomes an `Inquiry` and
+stays apart from clients until a member links or dismisses it.
 
 ### Retention and deletion of gallery data
 

@@ -142,6 +142,7 @@ function TaskEditor({ workspaceId, task, timezone }: { workspaceId: string; task
             {task.status === 'DONE' && <StatusBadge tone="success">Done</StatusBadge>}
             {task.overdue && <StatusBadge tone="danger">Overdue</StatusBadge>}
             {task.source === 'AUTOMATION' && <StatusBadge tone="info">Automated</StatusBadge>}
+            {task.source === 'INQUIRY' && <StatusBadge tone="info">Inquiry</StatusBadge>}
           </>
         }
         description={

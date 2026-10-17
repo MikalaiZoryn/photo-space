@@ -23,7 +23,7 @@ export type Task = {
   client: ClientSummary | null
   session: SessionSummary | null
   assignee: { userId: string; displayName: string } | null
-  source: 'MANUAL' | 'AUTOMATION'
+  source: 'MANUAL' | 'AUTOMATION' | 'INQUIRY'
   completedAt: string | null
   version: number
   createdAt: string

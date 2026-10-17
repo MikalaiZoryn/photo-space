@@ -67,6 +67,25 @@ public class AssetService {
     @Transactional
     UploadView createUpload(WorkspaceContext workspace, UUID sessionId, UploadInput input) {
         SessionSummary session = sessions.findSummary(workspace, sessionId).orElseThrow(NotFoundException::new);
+        requireValid(input, properties.maxUploadBytes());
+        if (session.archived()) {
+            throw new ConflictException("This session is archived. Restore it before uploading photos.");
+        }
+        return startUpload(workspace, sessionId, input);
+    }
+
+    /**
+     * Records a pending logo: an asset without a session, uploaded and processed like a photo but with a smaller
+     * size limit. It counts toward the workspace's storage quota and is cleaned up the same way if abandoned.
+     */
+    @Transactional
+    public UploadView createLogoUpload(WorkspaceContext workspace, String filename, String contentType, long byteSize) {
+        UploadInput input = new UploadInput(filename, contentType, byteSize);
+        requireValid(input, properties.maxLogoBytes());
+        return startUpload(workspace, null, input);
+    }
+
+    private void requireValid(UploadInput input, long maxBytes) {
         Map<String, String> errors = new LinkedHashMap<>();
         String filename = FileNames.forDisplay(input.filename());
         if (filename == null) {
@@ -76,16 +95,18 @@ public class AssetService {
         if (type.isEmpty()) {
             errors.put("contentType", "must be " + ImageType.acceptedList());
         }
-        if (input.byteSize() > properties.maxUploadBytes()) {
-            errors.put("byteSize", "must be at most " + megabytes(properties.maxUploadBytes()) + " MB");
+        if (input.byteSize() > maxBytes) {
+            errors.put("byteSize", "must be at most " + megabytes(maxBytes) + " MB");
         }
         if (!errors.isEmpty()) {
             throw new InvalidFieldsException(errors);
         }
-        if (session.archived()) {
-            throw new ConflictException("This session is archived. Restore it before uploading photos.");
-        }
+    }
+
+    private UploadView startUpload(WorkspaceContext workspace, UUID sessionId, UploadInput input) {
         requireWithinLimits(workspace, input.byteSize());
+        String filename = FileNames.forDisplay(input.filename());
+        ImageType type = ImageType.fromContentType(input.contentType()).orElseThrow();
 
         UUID assetId = UUID.randomUUID();
         String key = AssetKeys.original(workspace.workspaceId(), assetId);
@@ -98,12 +119,12 @@ public class AssetService {
                 .param("workspaceId", workspace.workspaceId())
                 .param("sessionId", sessionId)
                 .param("filename", filename)
-                .param("contentType", type.get().contentType)
+                .param("contentType", type.contentType)
                 .param("byteSize", input.byteSize())
                 .param("key", key)
                 .update();
         PresignedUpload upload = storage.presignUpload(
-                key, type.get().contentType, input.byteSize(), properties.uploadUrlValidity());
+                key, type.contentType, input.byteSize(), properties.uploadUrlValidity());
         return new UploadView(
                 get(workspace, assetId), new UploadTarget(upload.url(), "PUT", upload.headers(), upload.expiresAt()));
     }
@@ -183,6 +204,21 @@ public class AssetService {
             throw new ConflictException("This upload would exceed the workspace's storage limit of "
                     + megabytes(properties.workspaceQuotaBytes()) + " MB.");
         }
+    }
+
+    // --- Used by branding, which shows a logo to visitors of the public inquiry pages. ---
+
+    /**
+     * An image of this workspace that belongs to no session, such as a logo: its status and, once {@code READY}, a
+     * short-lived URL of its thumbnail. Empty for session photos, unknown IDs, and other workspaces' assets alike.
+     */
+    @Transactional(readOnly = true)
+    public Optional<StandaloneImage> findStandaloneImage(UUID workspaceId, UUID assetId) {
+        return find(workspaceId, assetId, false)
+                .filter(asset -> asset.sessionId() == null)
+                .map(asset -> new StandaloneImage(asset.id(), asset.status(), asset.status() == AssetStatus.READY
+                        ? storage.presignDownload(asset.thumbnailKey(), properties.viewUrlValidity())
+                        : null));
     }
 
     // --- Used by galleries, which authorize access to the workspace themselves (membership or a share link). ---
@@ -390,4 +426,7 @@ public class AssetService {
     public record UploadTarget(URI url, String method, Map<String, String> headers, Instant expiresAt) {}
 
     public record UploadView(AssetView asset, UploadTarget upload) {}
+
+    /** An image without a session. {@code url} is set only when {@code READY} and expires after a few minutes. */
+    public record StandaloneImage(UUID id, AssetStatus status, URI url) {}
 }

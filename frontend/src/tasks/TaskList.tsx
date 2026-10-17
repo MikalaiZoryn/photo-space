@@ -83,6 +83,7 @@ export function TaskList({ workspaceId, filter, emptyText, hideSession = false }
                 {task.overdue && <StatusBadge tone="danger">Overdue</StatusBadge>}
                 {task.status === 'DONE' && <StatusBadge tone="success">Done</StatusBadge>}
                 {task.source === 'AUTOMATION' && <StatusBadge tone="info">Automated</StatusBadge>}
+                {task.source === 'INQUIRY' && <StatusBadge tone="info">Inquiry</StatusBadge>}
               </>
             }
           />

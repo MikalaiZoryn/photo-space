@@ -42,7 +42,9 @@ const LIVENESS_CHECK = [
  *   IP addresses for outbound calls (Google, the Claude API, AWS APIs) and accept traffic only from the load
  *   balancer. The load balancer and the database are in isolated subnets with no route to the internet.
  * - **Edge:** CloudFront terminates TLS and is the only way in. It serves the frontend from a private bucket
- *   and forwards `/api/*` to the internal load balancer through a VPC origin. The edge stack's firewall rate-limits.
+ *   (index.html also for the public inquiry pages under `/inquiry/*` and `/embed/*`, of which only `/embed/*` may
+ *   be framed by other sites) and forwards `/api/*` to the internal load balancer through a VPC origin. The edge
+ *   stack's firewall rate-limits.
  * - **Services:** the same image runs as the API service (dispatcher on, worker off) and the worker service
  *   (worker and upload cleanup on), each with its own least-privilege task role. Deployments roll back on
  *   failed health checks.
@@ -101,30 +103,58 @@ export class PhotoSpaceStack extends Stack {
     // host, so the bucket gets a name fixed in advance. Presigned URLs use this virtual-hosted form.
     const photoBucketName = `${name}-photos-${this.account}-${this.region}`
     const photoHost = `${photoBucketName}.s3.${this.region}.amazonaws.com`
+    // Photos load from presigned S3 URLs and uploads PUT to them; everything else is this origin.
+    const contentSecurityPolicy = (frameAncestors: string) =>
+      [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        `img-src 'self' data: blob: https://${photoHost}`,
+        `connect-src 'self' https://${photoHost}`,
+        "font-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        `frame-ancestors ${frameAncestors}`,
+      ].join('; ')
+    const commonHeaders = {
+      strictTransportSecurity: { accessControlMaxAge: Duration.days(365), includeSubdomains: true, override: true },
+      contentTypeOptions: { override: true },
+      referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
+    }
     const securityHeaders = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeaders', {
       responseHeadersPolicyName: `${name}-security-headers`,
       securityHeadersBehavior: {
-        strictTransportSecurity: { accessControlMaxAge: Duration.days(365), includeSubdomains: true, override: true },
-        contentTypeOptions: { override: true },
+        ...commonHeaders,
         frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
-        referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
-        contentSecurityPolicy: {
-          // Photos load from presigned S3 URLs and uploads PUT to them; everything else is this origin.
-          contentSecurityPolicy: [
-            "default-src 'self'",
-            "script-src 'self'",
-            "style-src 'self' 'unsafe-inline'",
-            `img-src 'self' data: blob: https://${photoHost}`,
-            `connect-src 'self' https://${photoHost}`,
-            "font-src 'self'",
-            "object-src 'none'",
-            "base-uri 'self'",
-            "form-action 'self'",
-            "frame-ancestors 'none'",
-          ].join('; '),
-          override: true,
-        },
+        contentSecurityPolicy: { contentSecurityPolicy: contentSecurityPolicy("'none'"), override: true },
       },
+    })
+    // Only the embeddable inquiry form (/embed/*) may be framed, by any site. It has no X-Frame-Options, and it
+    // uses no session cookie or workspace API (D19).
+    const embedHeaders = new cloudfront.ResponseHeadersPolicy(this, 'EmbedHeaders', {
+      responseHeadersPolicyName: `${name}-embed-headers`,
+      securityHeadersBehavior: {
+        ...commonHeaders,
+        contentSecurityPolicy: { contentSecurityPolicy: contentSecurityPolicy('*'), override: true },
+      },
+    })
+    // The public inquiry pages are routes of the single-page app: serve its index.html for them.
+    const appShell = new cloudfront.Function(this, 'AppShellRewrite', {
+      functionName: `${name}-app-shell`,
+      comment: 'Serves index.html for the public inquiry pages',
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(
+        "function handler(event) { event.request.uri = '/index.html'; return event.request; }",
+      ),
+    })
+    const siteOrigin = origins.S3BucketOrigin.withOriginAccessControl(site)
+    const appShellBehavior = (responseHeadersPolicy: cloudfront.IResponseHeadersPolicy): cloudfront.BehaviorOptions => ({
+      origin: siteOrigin,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      responseHeadersPolicy,
+      functionAssociations: [{ function: appShell, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
     })
 
     const distribution = new cloudfront.Distribution(this, 'Cdn', {
@@ -134,12 +164,14 @@ export class PhotoSpaceStack extends Stack {
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       webAclId: props.webAclArn,
       defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessControl(site),
+        origin: siteOrigin,
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         responseHeadersPolicy: securityHeaders,
       },
       additionalBehaviors: {
+        '/inquiry/*': appShellBehavior(securityHeaders),
+        '/embed/*': appShellBehavior(embedHeaders),
         '/api/*': {
           origin: origins.VpcOrigin.withApplicationLoadBalancer(loadBalancer, {
             vpcOriginName: `${name}-api`,

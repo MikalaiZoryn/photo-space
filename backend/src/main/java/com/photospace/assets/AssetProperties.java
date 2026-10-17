@@ -12,6 +12,7 @@ import org.springframework.validation.annotation.Validated;
  * Upload limits and processing settings.
  *
  * @param maxUploadBytes the largest original accepted
+ * @param maxLogoBytes the largest logo accepted
  * @param workspaceQuotaBytes total original bytes a workspace may hold, counting uploads in progress
  * @param maxPendingUploads uploads a workspace may have started but not finished
  * @param uploadUrlValidity how long a presigned upload URL works
@@ -24,6 +25,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties("app.assets")
 public record AssetProperties(
         @Min(1) long maxUploadBytes,
+        @Min(1) long maxLogoBytes,
         @Min(1) long workspaceQuotaBytes,
         @Min(1) @Max(10_000) int maxPendingUploads,
         @NotNull Duration uploadUrlValidity,

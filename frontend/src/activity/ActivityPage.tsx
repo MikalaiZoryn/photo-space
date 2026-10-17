@@ -27,6 +27,13 @@ const actionLabels: Record<string, string> = {
   SHARE_LINK_REVOKED: 'Revoked a gallery share link',
   CONTENT_DRAFT_APPROVED: 'Approved a content draft',
   CONTENT_DRAFT_UNAPPROVED: 'Withdrew a content draft approval',
+  BRANDING_UPDATED: 'Changed the branding',
+  INQUIRY_FORM_PUBLISHED: 'Published the inquiry form',
+  INQUIRY_FORM_UNPUBLISHED: 'Unpublished the inquiry form',
+  INQUIRY_MATCHED: 'Checked an inquiry for matching clients',
+  INQUIRY_ASSOCIATED: 'Linked an inquiry to a client',
+  INQUIRY_DISMISSED: 'Dismissed an inquiry',
+  INQUIRY_REOPENED: 'Reopened an inquiry',
 }
 
 /** Where an event's record can be opened, if it still has a page of its own. */
@@ -41,6 +48,12 @@ function targetHref(event: AuditEvent): string | null {
     case 'AUTOMATION_RULE':
     case 'AUTOMATION_RUN':
       return paths.automation()
+    case 'INQUIRY':
+      return paths.inquiry(event.targetId)
+    case 'INQUIRY_FORM':
+      return paths.inquiryForm()
+    case 'BRANDING':
+      return paths.branding()
     default:
       return null
   }

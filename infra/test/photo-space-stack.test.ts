@@ -165,19 +165,53 @@ describe('database', () => {
 
 describe('CloudFront', () => {
   const distribution = () => resource(app, 'AWS::CloudFront::Distribution', 'Cdn').Properties.DistributionConfig
+  const behavior = (path: string) =>
+    (distribution().CacheBehaviors as Record<string, any>[]).find((b) => b.PathPattern === path)!
+  const headersPolicy = (id: string) =>
+    resource(app, 'AWS::CloudFront::ResponseHeadersPolicy', id).Properties.ResponseHeadersPolicyConfig.SecurityHeadersConfig
+  const policyRef = (id: string) => ({ Ref: Object.keys(app.findResources('AWS::CloudFront::ResponseHeadersPolicy'))
+    .find((logicalId) => logicalId.startsWith(id))! })
 
   it('serves only HTTPS, with the edge firewall attached', () => {
     assert.equal(distribution().DefaultCacheBehavior.ViewerProtocolPolicy, 'redirect-to-https')
-    assert.equal(distribution().CacheBehaviors[0].ViewerProtocolPolicy, 'https-only')
+    assert.equal(behavior('/api/*').ViewerProtocolPolicy, 'https-only')
+    for (const path of ['/inquiry/*', '/embed/*']) assert.equal(behavior(path).ViewerProtocolPolicy, 'redirect-to-https')
     assert.ok(distribution().WebACLId, 'web ACL')
   })
 
   it('forwards /api/* uncached to the internal load balancer, and nothing else', () => {
     const behaviors = distribution().CacheBehaviors as Record<string, any>[]
-    assert.deepEqual(behaviors.map((b) => b.PathPattern), ['/api/*'])
-    assert.equal(behaviors[0].CachePolicyId, '4135ea2d-6df8-44a3-9df3-4b5a84be39ad') // CachingDisabled
-    assert.equal(behaviors[0].OriginRequestPolicyId, '33f36d7e-f396-46d9-90e0-52428a34d9dc') // AllViewerAndCloudFrontHeaders-2022-06
+    assert.deepEqual(behaviors.map((b) => b.PathPattern).sort(), ['/api/*', '/embed/*', '/inquiry/*'])
+    assert.equal(behavior('/api/*').CachePolicyId, '4135ea2d-6df8-44a3-9df3-4b5a84be39ad') // CachingDisabled
+    assert.equal(behavior('/api/*').OriginRequestPolicyId, '33f36d7e-f396-46d9-90e0-52428a34d9dc') // AllViewerAndCloudFrontHeaders-2022-06
     assert.equal(resources(app, 'AWS::CloudFront::VpcOrigin').length, 1)
+    for (const path of ['/inquiry/*', '/embed/*']) {
+      assert.equal(behavior(path).TargetOriginId, distribution().DefaultCacheBehavior.TargetOriginId, `${path} is the app`)
+    }
+  })
+
+  it('serves the app shell for the public inquiry pages', () => {
+    const [[functionId, fn]] = resources(app, 'AWS::CloudFront::Function')
+    assert.match(fn.Properties.FunctionCode, /event\.request\.uri = '\/index\.html'/)
+    for (const path of ['/inquiry/*', '/embed/*']) {
+      assert.deepEqual(behavior(path).FunctionAssociations, [
+        { EventType: 'viewer-request', FunctionARN: { 'Fn::GetAtt': [functionId, 'FunctionARN'] } },
+      ])
+    }
+    assert.equal(distribution().DefaultCacheBehavior.FunctionAssociations, undefined)
+  })
+
+  it('lets other sites frame only /embed/*', () => {
+    const embed = headersPolicy('EmbedHeaders')
+    assert.equal(embed.FrameOptions, undefined, 'no X-Frame-Options')
+    assert.match(JSON.stringify(embed.ContentSecurityPolicy.ContentSecurityPolicy), /frame-ancestors \*"/)
+    assert.equal(embed.StrictTransportSecurity.AccessControlMaxAgeSec, 31536000)
+    assert.deepEqual(behavior('/embed/*').ResponseHeadersPolicyId, policyRef('EmbedHeaders'))
+    for (const path of ['/api/*', '/inquiry/*']) {
+      assert.deepEqual(behavior(path).ResponseHeadersPolicyId, policyRef('SecurityHeaders'), path)
+    }
+    assert.deepEqual(distribution().DefaultCacheBehavior.ResponseHeadersPolicyId, policyRef('SecurityHeaders'))
+    assert.equal(headersPolicy('SecurityHeaders').FrameOptions.FrameOption, 'DENY')
   })
 
   it('sends security headers, with a CSP that allows only this origin and the photo bucket', () => {

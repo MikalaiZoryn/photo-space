@@ -49,6 +49,7 @@ app:
       max-delay: 15m
   assets:
     max-upload-bytes: 104857600 # 100 MB
+    max-logo-bytes: 5242880 # 5 MB
     workspace-quota-bytes: 107374182400 # 100 GB
     max-pending-uploads: 100
     upload-url-validity: 15m

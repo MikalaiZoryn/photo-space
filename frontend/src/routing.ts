@@ -23,6 +23,10 @@ export type Route =
   | { page: 'automation' }
   | { page: 'activity' }
   | { page: 'members' }
+  | { page: 'inquiries' }
+  | { page: 'inquiry'; id: string }
+  | { page: 'inquiryForm' }
+  | { page: 'branding' }
 
 export function parseRoute(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#\/?/, '').split('?')
@@ -51,6 +55,12 @@ export function parseRoute(hash: string): Route {
     if (id && action === 'edit') return { page: 'taskEdit', id }
     return { page: 'tasks' }
   }
+  if (section === 'inquiries') {
+    if (id) return { page: 'inquiry', id }
+    return { page: 'inquiries' }
+  }
+  if (section === 'inquiry-form') return { page: 'inquiryForm' }
+  if (section === 'branding') return { page: 'branding' }
   if (section === 'automation') return { page: 'automation' }
   if (section === 'activity') return { page: 'activity' }
   if (section === 'members') return { page: 'members' }
@@ -76,6 +86,26 @@ export const paths = {
   automation: () => '#/automation',
   activity: () => '#/activity',
   members: () => '#/members',
+  inquiries: () => '#/inquiries',
+  inquiry: (id: string) => `#/inquiries/${encodeURIComponent(id)}`,
+  inquiryForm: () => '#/inquiry-form',
+  branding: () => '#/branding',
+}
+
+/**
+ * The public inquiry pages are real paths, not hash routes, because CloudFront lets other sites frame only
+ * `/embed/*`: `/inquiry/<slug>` is the hosted page, `/embed/inquiry/<slug>` the embeddable one.
+ */
+export type PublicInquiryRoute = { slug: string; embed: boolean }
+
+export function publicInquiryRoute(pathname: string): PublicInquiryRoute | null {
+  const match = /^\/(embed\/)?inquiry\/([^/]+)\/?$/.exec(pathname)
+  if (!match) return null
+  try {
+    return { slug: decodeURIComponent(match[2]), embed: match[1] !== undefined }
+  } catch {
+    return { slug: match[2], embed: match[1] !== undefined }
+  }
 }
 
 /**
