@@ -73,6 +73,8 @@ Suggested backend packages/modules:
 ``` text
 identity/
 workspaces/
+invitations/
+mail/
 clients/
 inquiries/
 branding/
@@ -99,6 +101,10 @@ provider's SDK types leak into domain models.
 -   **identity:** authentication callback/session lifecycle, external
     identity mapping.
 -   **workspaces:** workspace membership and authorization policies.
+-   **invitations:** owners invite people by email; the invitee joins
+    by accepting with a verified matching email (D20).
+-   **mail:** the outbound email adapter (local `.eml` files, Amazon
+    SES); no provider types outside it (D20).
 -   **clients:** client profile and contact information.
 -   **branding:** how the public inquiry pages look: display name, logo
     (a session-less photo asset), colors, font, contact details (D19).
@@ -171,6 +177,12 @@ Suggested tables (fields are indicative; refine during implementation):
     reference/settings, timestamps.
 -   `workspace_members`: `workspace_id`, `user_id`, role, created
     timestamp; unique workspace + user.
+-   `workspace_invitations`: `workspace_id`, lower-cased email, role
+    (`MEMBER`), status (`PENDING`, `ACCEPTED`, `REVOKED`), SHA-256 hash
+    of the newest email's token, expiry, email status (`QUEUED`,
+    `SENT`, `FAILED`), send count, inviting, accepting, and revoking
+    users with times; one `PENDING` row per workspace and email.
+    (D20.)
 -   `clients`: `id`, `workspace_id`, name, email, phone, notes,
     `archived_at`, `version`, timestamps. (Implemented in Milestone 3.)
 -   `photo_sessions`: `id`, `workspace_id`, optional `client_id`
@@ -281,6 +293,9 @@ tokens, share tokens, or private photo URLs.
 -   Use `Secure`, `HttpOnly`, appropriately configured `SameSite`
     cookies and CSRF protection for state-changing requests.
 -   Keep login scopes separate from Gmail/Calendar API scopes.
+-   Workspace invitations (D20) are accepted by a signed-in user whose
+    verified email matches the invited address; the membership is
+    keyed on that user, never on the email.
 -   Provide sign-out and account/workspace access checks.
 -   Store OAuth refresh tokens only on the server, encrypted at rest,
     with narrowly scoped access; support disconnect/revoke and deletion.

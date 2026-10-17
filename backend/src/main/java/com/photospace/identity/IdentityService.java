@@ -58,6 +58,23 @@ public class IdentityService {
         return userId;
     }
 
+    /**
+     * Whether one of the user's identities has {@code email} as a verified address, ignoring case. This only
+     * authorizes a one-time step such as accepting an invitation sent to that address; users are still looked up
+     * by (provider, subject).
+     */
+    @Transactional(readOnly = true)
+    public boolean hasVerifiedEmail(UUID userId, String email) {
+        return jdbc.sql("""
+                        SELECT EXISTS (SELECT 1 FROM external_identities
+                                        WHERE user_id = :userId AND email_verified AND lower(email) = lower(:email))
+                        """)
+                .param("userId", userId)
+                .param("email", email)
+                .query(Boolean.class)
+                .single();
+    }
+
     @Transactional(readOnly = true)
     public Optional<UserProfile> findProfile(UUID userId) {
         return jdbc.sql("""

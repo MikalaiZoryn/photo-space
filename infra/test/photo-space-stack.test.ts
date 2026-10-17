@@ -110,6 +110,44 @@ describe('services', () => {
   })
 })
 
+describe('outbound email', () => {
+  const withMail = synthesize('staging', 'studio@example.com').app
+  const workerEnvironment = (template: typeof app) => {
+    const [[, task]] = resources(template, 'AWS::ECS::TaskDefinition').filter(
+      ([, t]) => t.Properties.Family === 'photo-space-staging-worker',
+    )
+    return Object.fromEntries(
+      (task.Properties.ContainerDefinitions[0].Environment as { Name: string; Value: unknown }[]).map((e) => [e.Name, e.Value]),
+    )
+  }
+
+  it('points email links at the app for both services', () => {
+    for (const family of ['api', 'worker']) {
+      assert.match(JSON.stringify(environment(family).APP_URL), /https:\/\/.*DomainName/)
+    }
+  })
+
+  it('stays off without a sender: no identity, no permission, no provider', () => {
+    assert.equal(resources(app, 'AWS::SES::EmailIdentity').length, 0)
+    assert.equal(environment('worker').MAIL_PROVIDER, undefined)
+    assert.ok(!taskPolicy('worker').flatMap(actions).some((action) => action.startsWith('ses:')))
+  })
+
+  it('lets only the worker send, and only from the configured sender', () => {
+    assert.equal(resource(withMail, 'AWS::SES::EmailIdentity', 'MailSender').Properties.EmailIdentity, 'studio@example.com')
+    assert.equal(workerEnvironment(withMail).MAIL_PROVIDER, 'ses')
+    assert.equal(workerEnvironment(withMail).MAIL_FROM, 'studio@example.com')
+    const workerStatements = resource(withMail, 'AWS::IAM::Policy', 'workerTaskRoleDefaultPolicy').Properties.PolicyDocument
+      .Statement as Statement[]
+    const send = workerStatements.find((s) => actions(s).includes('ses:SendEmail'))!
+    assert.deepEqual(actions(send), ['ses:SendEmail'])
+    assert.match(JSON.stringify(send.Resource), /:identity\/",\{"Ref":"MailSender[0-9A-F]+"\}/)
+    const apiStatements = resource(withMail, 'AWS::IAM::Policy', 'apiTaskRoleDefaultPolicy').Properties.PolicyDocument
+      .Statement as Statement[]
+    assert.ok(!apiStatements.flatMap(actions).some((action) => action.startsWith('ses:')))
+  })
+})
+
 describe('network', () => {
   it('keeps the load balancer and the database off the internet', () => {
     const balancer = resource(app, 'AWS::ElasticLoadBalancingV2::LoadBalancer', 'LoadBalancer').Properties

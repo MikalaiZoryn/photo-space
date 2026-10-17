@@ -89,6 +89,9 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `GET /api/workspaces`, `POST /api/workspaces` | Signed in. Lists your workspaces, or creates one with you as owner. |
 | `GET /api/workspaces/{id}`, `GET /api/workspaces/{id}/members` | Workspace members. Everyone else gets 404. |
 | `PUT /api/workspaces/{id}` | Workspace owners (members get 403, non-members get 404). |
+| `GET`, `POST /api/workspaces/{id}/invitations` | Owners. Lists open invitations, or invites `{email}` as a member and queues the email. 409 for a second open invitation to the same address or more than 20 open ones. |
+| `POST /api/workspaces/{id}/invitations/{invitationId}/resend`, `…/revoke` | Owners. Resend emails a new link (the old one stops working) at most once a minute; revoke is idempotent. |
+| `GET /api/invitation`, `POST /api/invitation/accept` | Signed in, with the `X-Invitation-Token` header from the emailed link. Shows the invitation, or joins the workspace when your verified email is the invited address (409 otherwise). |
 | `GET /api/workspaces/{id}/clients?q=&archived=false&page=0&size=25` | Members. Clients sorted by name; `q` searches name and email. |
 | `POST /api/workspaces/{id}/clients` | Members. Creates a client: `{name, email, phone, notes}`. |
 | `GET`, `PUT /api/workspaces/{id}/clients/{clientId}` | Members. `PUT` takes `{version, client: {…}}`. |
@@ -258,6 +261,17 @@ With the stack running and dev sign-in:
 5. Open the first inquiry and **Link to …**: the inquiry links to the client, session, and follow-up task, and the review task is done. Open the second, **Dismiss** it, switch the **Status** filter to **Dismissed**, and **Reopen** it.
 6. To try the embed, save the snippet in an HTML file and open it from `http://localhost:8000` (`python3 -m http.server 8000`) with the snippet's URL pointing at `http://localhost:5173`. Locally there are no framing headers; deployed, only `/embed/*` can be framed.
 7. **Unpublish**: the private window shows "This form is not available", and existing inquiries stay. In another user's window, the inquiry URLs show "not found".
+
+### Invitations: a quick manual check
+
+Locally, emails are not sent: each one is written to `backend/target/dev-mail/<time>-<id>.eml` (the backend logs the path). Any mail program opens these files, or read the link with `grep -h invite backend/target/dev-mail/*.eml`. With dev sign-in:
+
+1. Sign in as `owner@example.com`, open **Members**, and invite `carol@example.com`. The row shows "Sending…", then "Email sent".
+2. Open the link from the newest `.eml` file in a private window. Sign in there as `eve@example.com`: the page says the invitation is for another address and offers **Sign out**. Sign out and sign in as `carol@example.com`: the page shows **Accept invitation**.
+3. **Accept invitation**. Carol lands in the owner's workspace as a member, and the owner's **Members** list shows her. Opening the link again says it was already used.
+4. Invite another address, **Revoke** it, and open its link: "This invitation was withdrawn". **Resend** right after inviting is refused for a minute; a resent email's link works, and the previous one shows "does not work".
+
+To see the email jobs: `docker compose exec postgres psql -U photospace -c "SELECT email, status, email_status, send_count FROM workspace_invitations ORDER BY created_at DESC LIMIT 5"`.
 
 ### Health endpoints
 

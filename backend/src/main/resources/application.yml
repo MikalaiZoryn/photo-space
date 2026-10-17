@@ -47,6 +47,19 @@ app:
       max-attempts: 5
       base-delay: 30s
       max-delay: 15m
+  # Outbound email (D20). Locally, the file provider writes each message as an .eml file and sends nothing. The
+  # aws profile defaults to disabled; the stack sets MAIL_PROVIDER=ses and MAIL_FROM when a sender is configured.
+  mail:
+    provider: ${MAIL_PROVIDER:file}
+    from: ${MAIL_FROM:}
+    region: ${AWS_REGION:eu-central-1}
+    file-directory: ${MAIL_FILE_DIRECTORY:target/dev-mail}
+  # Workspace invitations by email (D20). Links in invitation emails point at APP_URL.
+  invitations:
+    app-url: ${APP_URL:http://localhost:5173}
+    valid-for: 7d
+    max-pending: 20
+    resend-cooldown: 1m
   assets:
     max-upload-bytes: 104857600 # 100 MB
     max-logo-bytes: 5242880 # 5 MB

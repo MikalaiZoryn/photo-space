@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseRoute, paths, publicInquiryRoute } from './routing.ts'
+import { invitationToken, parseRoute, paths, publicInquiryRoute } from './routing.ts'
 
 describe('parseRoute', () => {
   it('reads every page from the hash', () => {
@@ -50,5 +50,17 @@ describe('publicInquiryRoute', () => {
     for (const path of ['/', '/inquiry', '/inquiry/', '/inquiry/a/b', '/embed/a', '/x/inquiry/a', '/embed/inquiry/']) {
       expect(publicInquiryRoute(path)).toBeNull()
     }
+  })
+})
+
+describe('invitationToken', () => {
+  it('reads the token from an invitation link', () => {
+    expect(invitationToken('#/invite/abc_DEF-123')).toBe('abc_DEF-123')
+    expect(invitationToken('#/invite/')).toBe('')
+  })
+
+  it('ignores other pages', () => {
+    expect(invitationToken('#/members')).toBeNull()
+    expect(invitationToken('')).toBeNull()
   })
 })

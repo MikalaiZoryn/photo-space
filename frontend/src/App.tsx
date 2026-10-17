@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { fetchAuthOptions, fetchMe, signOut, type AuthOptions, type Me } from './api/auth.ts'
 import { PublicGalleryPage } from './galleries/PublicGalleryPage.tsx'
 import { PublicInquiryPage } from './inquiries/PublicInquiryPage.tsx'
-import { publicInquiryRoute, usePublicGalleryToken } from './routing.ts'
+import { InvitePage } from './invitations/InvitePage.tsx'
+import { forgetInvitation, recallInvitation, rememberInvitation } from './invitations/pendingInvitation.ts'
+import { invitationToken, navigate, paths, publicInquiryRoute, usePublicGalleryToken } from './routing.ts'
 import { CenteredLayout } from './layout/CenteredLayout.tsx'
+import { writeSelected } from './selectedWorkspace.ts'
 import { SignIn } from './SignIn.tsx'
 import { Button } from '@/components/ui/button'
 import { ErrorAlert, Loading } from './ui/Feedback.tsx'
@@ -34,6 +37,17 @@ function WorkspaceApp() {
   const [reloadCount, setReloadCount] = useState(0)
   const [signInFailed] = useState(() => new URLSearchParams(window.location.search).has('signInError'))
   const [signOutFailed, setSignOutFailed] = useState(false)
+  const [invitation, setInvitation] = useState(currentInvitation)
+
+  useEffect(() => {
+    // An invitation link opened while the app is already open.
+    const update = () => {
+      const token = invitationToken(window.location.hash)
+      if (token !== null) setInvitation(currentInvitation())
+    }
+    window.addEventListener('hashchange', update)
+    return () => window.removeEventListener('hashchange', update)
+  }, [])
 
   useEffect(() => {
     // The backend redirects here with ?signInError after a failed Google sign-in; keep the URL clean.
@@ -67,6 +81,24 @@ function WorkspaceApp() {
 
   const signOutAlert = signOutFailed && <ErrorAlert>Sign-out failed. Please try again.</ErrorAlert>
 
+  function invitationDone(workspaceId: string | null) {
+    forgetInvitation()
+    if (workspaceId !== null) writeSelected(workspaceId)
+    setInvitation(null)
+    navigate(paths.sessions())
+  }
+
+  if (session.kind === 'signedIn' && invitation !== null) {
+    return (
+      <InvitePage
+        key={invitation}
+        token={invitation}
+        signedInAs={session.me.email}
+        onDone={invitationDone}
+        onSignOut={handleSignOut}
+      />
+    )
+  }
   if (session.kind === 'signedIn') {
     return <Workspaces userName={session.me.displayName} onSignOut={handleSignOut} notice={signOutAlert} />
   }
@@ -84,10 +116,26 @@ function WorkspaceApp() {
         </ErrorAlert>
       )}
       {session.kind === 'signedOut' && (
-        <SignIn options={session.options} signInFailed={signInFailed} onSignedIn={reload} />
+        <SignIn
+          options={session.options}
+          signInFailed={signInFailed}
+          onSignedIn={reload}
+          intro={invitation !== null ? 'Sign in with the Google account the invitation was sent to.' : undefined}
+        />
       )}
     </CenteredLayout>
   )
+}
+
+/**
+ * The invitation being opened: from the link in the address bar, or remembered from before a sign-in round trip,
+ * which comes back without the link's fragment.
+ */
+function currentInvitation(): string | null {
+  const token = invitationToken(window.location.hash)
+  if (token === null) return recallInvitation()
+  rememberInvitation(token)
+  return token
 }
 
 export default App

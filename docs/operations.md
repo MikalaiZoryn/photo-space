@@ -68,13 +68,22 @@ Prerequisites: the AWS CLI v2, Docker, Node.js 24, and credentials for the targe
 
    Never change the secret's value in `infra/` code: CloudFormation would overwrite what you stored.
 
-5. **Subscribe to alarms**, for example by email (AWS sends a confirmation link):
+5. **Optional: turn on invitation emails** (D20). Without this, invitation emails show as failed. Deploy the app stack with a sender address, then click the verification link AWS sends to that address:
+
+   ```bash
+   cd infra && npx cdk deploy PhotoSpace-staging -c env=staging -c mailFrom=studio@example.com
+   aws sesv2 get-email-identity --region us-west-2 --email-identity studio@example.com --query VerifiedForSendingStatus
+   ```
+
+   Pass the same `-c mailFrom=…` on every later deploy, or the identity and the worker's permission are removed. The **Deploy** workflow passes the GitHub environment variable `MAIL_FROM`, so set it there too. A new SES account is in the sandbox: it sends only to verified addresses, up to 200 messages a day. To invite anyone, request production access in the SES console (Account dashboard). A sender at a domain you own (with DKIM) delivers better than a free-mail address.
+
+6. **Subscribe to alarms**, for example by email (AWS sends a confirmation link):
 
    ```bash
    aws sns subscribe --region us-west-2 --topic-arn <AlarmTopicArn> --protocol email --notification-endpoint <address>
    ```
 
-6. **Check the deployment** with the steps in [Verify a deployment](#verify-a-deployment).
+7. **Check the deployment** with the steps in [Verify a deployment](#verify-a-deployment).
 
 ## Deploy a change
 

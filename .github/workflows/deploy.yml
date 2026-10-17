@@ -52,8 +52,11 @@ jobs:
       - run: npm ci
         working-directory: infra
       # Builds the backend image, pushes it to the CDK asset repository, and updates both stacks. ECS rolls the
-      # services and rolls back on its own if new tasks fail their health checks.
+      # services and rolls back on its own if new tasks fail their health checks. MAIL_FROM (optional, a GitHub
+      # environment variable) is the SES sender for invitation emails (D20); left empty, email stays off.
       - run: >-
           npx cdk deploy PhotoSpace-${{ inputs.environment }}-Edge PhotoSpace-${{ inputs.environment }}
-          -c env=${{ inputs.environment }} --require-approval never
+          -c env=${{ inputs.environment }} -c mailFrom="$MAIL_FROM" --require-approval never
         working-directory: infra
+        env:
+          MAIL_FROM: ${{ vars.MAIL_FROM }}

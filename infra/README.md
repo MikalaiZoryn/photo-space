@@ -28,6 +28,6 @@ npm test                                                     # CDK assertions wi
 npx cdk synth -q -c env=staging                              # writes cdk.out/, needs no AWS credentials or Docker
 ```
 
-`-c env=staging|prod` is required. Deploying needs AWS credentials, Docker (to build the backend image), and a bootstrapped account: see [`docs/operations.md`](../docs/operations.md). Nothing has been deployed yet.
+`-c env=staging|prod` is required. `-c mailFrom=<address>` is optional: it creates that SES sender identity and lets the worker send invitation emails from it (D20). Deploying needs AWS credentials, Docker (to build the backend image), and a bootstrapped account: see [`docs/operations.md`](../docs/operations.md). Nothing has been deployed yet.
 
 `scripts/restore-test.sh <env>` runs the database restore test against a deployed environment.

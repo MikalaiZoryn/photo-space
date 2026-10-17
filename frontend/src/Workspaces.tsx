@@ -15,10 +15,12 @@ import { BrandingPage } from './inquiries/BrandingPage.tsx'
 import { FormBuilderPage } from './inquiries/FormBuilderPage.tsx'
 import { InquiriesPage } from './inquiries/InquiriesPage.tsx'
 import { InquiryDetail } from './inquiries/InquiryDetail.tsx'
+import { Invitations } from './invitations/Invitations.tsx'
 import { AppShell, type NavItem } from './layout/AppShell.tsx'
 import { CenteredLayout } from './layout/CenteredLayout.tsx'
 import { listMembers, listWorkspaces, type Workspace } from './api/workspaces.ts'
 import { navigate, paths, useRoute, type Route } from './routing.ts'
+import { readSelected, writeSelected } from './selectedWorkspace.ts'
 import { EditSession, NewSession, SessionDetail } from './sessions/SessionDetail.tsx'
 import { SessionsPage } from './sessions/SessionsPage.tsx'
 import { EditTask, NewTask, TasksPage } from './tasks/TasksPage.tsx'
@@ -28,9 +30,6 @@ import { PageHeader } from './ui/PageHeader.tsx'
 import { Initials, RecordList, RecordRow } from './ui/RecordList.tsx'
 import { StatusBadge } from './ui/StatusBadge.tsx'
 import { useLoad, type Loadable } from './useLoad.ts'
-
-// Only remembers which workspace was last open in this browser. Access is always checked by the server.
-const SELECTED_KEY = 'photospace.selectedWorkspace'
 
 /** Workspace onboarding (create the first one) and selection between the user's workspaces. */
 type Props = {
@@ -300,22 +299,7 @@ function MembersPage({ workspace }: { workspace: Workspace }) {
           ))}
         </RecordList>
       )}
+      {workspace.role === 'OWNER' && <Invitations workspaceId={workspace.id} timezone={workspace.timezone} />}
     </section>
   )
-}
-
-function readSelected(): string | null {
-  try {
-    return window.localStorage.getItem(SELECTED_KEY)
-  } catch {
-    return null
-  }
-}
-
-function writeSelected(id: string) {
-  try {
-    window.localStorage.setItem(SELECTED_KEY, id)
-  } catch {
-    // Storage can be unavailable (private mode, blocked site data); selection then lasts for this page only.
-  }
 }

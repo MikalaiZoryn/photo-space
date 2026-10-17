@@ -136,6 +136,15 @@ export function usePublicGalleryToken(): string | null {
   return token
 }
 
+/**
+ * An invitation link from an email: `#/invite/<token>`. As with gallery links, the token is in the fragment, so
+ * it never reaches a server, an access log, or a Referer header.
+ */
+export function invitationToken(hash: string): string | null {
+  const match = /^#\/invite\/(.*)$/.exec(hash)
+  return match ? match[1] : null
+}
+
 export function navigate(hash: string) {
   window.location.hash = hash
 }
