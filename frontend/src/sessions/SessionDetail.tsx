@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getClient, summaryOf } from '../api/clients.ts'
 import { SessionContent } from '../content/SessionContent.tsx'
+import { SessionPlanPanel } from '../content/SessionPlanPanel.tsx'
 import { SessionGalleries } from '../galleries/SessionGalleries.tsx'
 import { SessionTasks } from '../tasks/SessionTasks.tsx'
 import {
@@ -227,6 +228,7 @@ function SessionView({
           timezone={session.timezone}
           archived={archived}
         />
+        <SessionPlanPanel workspaceId={workspaceId} sessionId={session.id} archived={archived} />
         <SessionContent
           workspaceId={workspaceId}
           sessionId={session.id}

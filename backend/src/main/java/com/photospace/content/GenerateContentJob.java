@@ -34,13 +34,15 @@ class GenerateContentJob implements JobHandler {
 
     private final ContentService content;
     private final BrandProfileService brands;
+    private final StudioSettingsService settings;
     private final AssetService assets;
     private final ContentGenerationProvider provider;
 
-    GenerateContentJob(ContentService content, BrandProfileService brands, AssetService assets,
-            ContentGenerationProvider provider) {
+    GenerateContentJob(ContentService content, BrandProfileService brands, StudioSettingsService settings,
+            AssetService assets, ContentGenerationProvider provider) {
         this.content = content;
         this.brands = brands;
+        this.settings = settings;
         this.assets = assets;
         this.provider = provider;
     }
@@ -52,7 +54,8 @@ class GenerateContentJob implements JobHandler {
 
     @Override
     public void run(Job job) throws IOException {
-        Optional<PendingBatch> found = content.findPending(job.workspaceId(), job.subjectId());
+        Optional<PendingBatch> found =
+                content.findPending(job.workspaceId(), job.subjectId(), ContentBatchKind.CAPTIONS);
         if (found.isEmpty()) {
             return; // Already finished by an earlier delivery.
         }
@@ -71,8 +74,8 @@ class GenerateContentJob implements JobHandler {
             return;
         }
         GenerationRequest request = new GenerationRequest(brands.forGeneration(batch.workspaceId()),
-                batch.sessionType(), batch.notes(), photos, batch.captionCount(), batch.includeHashtags(),
-                batch.includeCallToAction());
+                batch.sessionType(), settings.forWorkspace(batch.workspaceId()).studioArea(), batch.notes(), photos,
+                batch.captionCount(), batch.includeHashtags(), batch.includeCallToAction());
         try {
             GenerationResult result = provider.generate(request);
             ValidatedContent valid = ContentValidator.validate(result, request);

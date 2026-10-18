@@ -3,8 +3,8 @@ package com.photospace.content;
 import java.util.List;
 
 /**
- * Everything a provider may use, and nothing else: the brand profile, the session type, the notes the
- * photographer chose to send, and the selected photos' previews. No client name or contact details are part of
+ * Everything a provider may use, and nothing else: the brand profile, the session type, the studio's area from
+ * the Content Studio settings, the notes the photographer chose to send, and the selected photos' previews. No client name or contact details are part of
  * it. All of it is untrusted data for the model, never instructions.
  *
  * @param photos the selected photos in selection order; each has a reference such as {@code photo-1} that the
@@ -13,6 +13,7 @@ import java.util.List;
 public record GenerationRequest(
         Brand brand,
         String sessionType,
+        String studioArea,
         String notes,
         List<Photo> photos,
         int captionCount,

@@ -7,7 +7,10 @@ import { AutomationPage } from './automation/AutomationPage.tsx'
 import { ClientDetail, EditClient, NewClient } from './clients/ClientDetail.tsx'
 import { ClientsPage } from './clients/ClientsPage.tsx'
 import { BatchPage } from './content/BatchPage.tsx'
-import { ContentPage } from './content/ContentPage.tsx'
+import { ContentStudioPage } from './content/ContentStudioPage.tsx'
+import { PlanPage } from './content/PlanPage.tsx'
+import { PostKitPage } from './content/PostKitPage.tsx'
+import { PostPage } from './content/PostPage.tsx'
 import { CreateWorkspaceForm } from './CreateWorkspaceForm.tsx'
 import { DashboardPage } from './dashboard/DashboardPage.tsx'
 import { GalleriesPage } from './galleries/GalleriesPage.tsx'
@@ -24,7 +27,7 @@ import { navigate, paths, useRoute, type Route } from './routing.ts'
 import { readSelected, writeSelected } from './selectedWorkspace.ts'
 import { EditSession, NewSession, SessionDetail } from './sessions/SessionDetail.tsx'
 import { SessionsPage } from './sessions/SessionsPage.tsx'
-import { ContentStudioPage } from './settings/ContentStudioPage.tsx'
+import { ContentStudioSettingsPage } from './settings/ContentStudioSettingsPage.tsx'
 import { SettingsPage } from './settings/SettingsPage.tsx'
 import { EditTask, NewTask, TasksPage } from './tasks/TasksPage.tsx'
 import { ErrorAlert, Loading } from './ui/Feedback.tsx'
@@ -196,7 +199,7 @@ function WorkspaceHome({
     { href: paths.clients(), label: 'Clients', icon: Users, current: section === 'clients' },
     { href: paths.inquiries(), label: 'Inquiries', icon: Inbox, current: section === 'inquiries' },
     { href: paths.galleries(), label: 'Galleries', icon: Images, current: section === 'galleries' },
-    { href: paths.content(), label: 'Content', icon: Sparkles, current: section === 'content' },
+    { href: paths.content(), label: 'Content Studio', icon: Sparkles, current: section === 'content' },
     // The audit log is for owners; the server refuses it to members anyway.
     ...(workspace.role === 'OWNER'
       ? [{ href: paths.activity(), label: 'Activity', icon: History, current: section === 'activity' }]
@@ -231,6 +234,9 @@ function sectionOf(route: Route) {
       return 'galleries'
     case 'content':
     case 'contentBatch':
+    case 'contentPlan':
+    case 'contentPost':
+    case 'contentPostKit':
       return 'content'
     case 'tasks':
     case 'taskNew':
@@ -239,7 +245,7 @@ function sectionOf(route: Route) {
     case 'activity':
       return 'activity'
     case 'settings':
-    case 'contentStudio':
+    case 'contentStudioSettings':
     case 'automation':
     case 'members':
     case 'inquiryForm':
@@ -278,9 +284,15 @@ function RoutedPage({ workspace, userId, route }: { workspace: Workspace; userId
     case 'gallery':
       return <GalleryPage key={route.id} workspaceId={workspaceId} galleryId={route.id} timezone={timezone} />
     case 'content':
-      return <ContentPage workspaceId={workspaceId} timezone={timezone} />
+      return <ContentStudioPage workspaceId={workspaceId} timezone={timezone} view={route.view} />
     case 'contentBatch':
       return <BatchPage key={route.id} workspaceId={workspaceId} batchId={route.id} timezone={timezone} />
+    case 'contentPlan':
+      return <PlanPage key={route.sessionId} workspaceId={workspaceId} sessionId={route.sessionId} />
+    case 'contentPost':
+      return <PostPage key={route.id} workspaceId={workspaceId} postId={route.id} timezone={timezone} />
+    case 'contentPostKit':
+      return <PostKitPage key={route.id} workspaceId={workspaceId} postId={route.id} />
     case 'tasks':
       return <TasksPage workspaceId={workspaceId} timezone={timezone} />
     case 'taskNew':
@@ -303,8 +315,8 @@ function RoutedPage({ workspace, userId, route }: { workspace: Workspace; userId
       return <BrandingPage workspaceId={workspaceId} />
     case 'settings':
       return <SettingsPage />
-    case 'contentStudio':
-      return <ContentStudioPage workspaceId={workspaceId} />
+    case 'contentStudioSettings':
+      return <ContentStudioSettingsPage workspaceId={workspaceId} />
   }
 }
 

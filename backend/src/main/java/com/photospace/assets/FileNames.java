@@ -30,4 +30,11 @@ final class FileNames {
         String stem = dot > 0 ? displayName.substring(0, dot) : displayName;
         return stem + "-preview.jpg";
     }
+
+    /** The download name of a photo's 4:5 export: {@code IMG_0042.JPG} becomes {@code IMG_0042-4x5.jpg}. */
+    static String exportOf(String displayName) {
+        int dot = displayName.lastIndexOf('.');
+        String stem = dot > 0 ? displayName.substring(0, dot) : displayName;
+        return stem + "-4x5.jpg";
+    }
 }

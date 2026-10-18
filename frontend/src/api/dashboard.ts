@@ -9,6 +9,7 @@ export const WIDGET_TYPES = [
   'GALLERIES',
   'RECENT_ACTIVITY',
   'QUICK_ACTIONS',
+  'THIS_WEEK_POSTS',
 ] as const
 export type WidgetType = (typeof WIDGET_TYPES)[number]
 

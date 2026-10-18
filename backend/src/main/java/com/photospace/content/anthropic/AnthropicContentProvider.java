@@ -29,6 +29,8 @@ import com.photospace.content.ContentPrompt;
 import com.photospace.content.ContentProperties;
 import com.photospace.content.GenerationRequest;
 import com.photospace.content.GenerationResult;
+import com.photospace.content.PlanRequest;
+import com.photospace.content.PlanResult;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -40,7 +42,7 @@ import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Drafts from Claude through the Messages API. One request per batch: each photo's preview as a JPEG image
+ * Drafts and session plans from Claude through the Messages API. One request per batch: each photo's preview as a JPEG image
  * labelled with its reference, then the escaped brand profile, session type, and notes, with the answer
  * constrained to a JSON schema. SDK types and messages stay in this class: callers see a
  * {@link GenerationResult} or a {@link ContentGenerationException} with a provider-neutral kind.
@@ -75,6 +77,23 @@ class AnthropicContentProvider implements ContentGenerationProvider {
                     .build())
             .build();
 
+    private static final Map<String, Object> PLAN_POST = Map.of(
+            "type", "object",
+            "additionalProperties", false,
+            "required", List.of("slot", "photos", "caption", "call_to_action", "hashtags", "idea"),
+            "properties", Map.of("slot", Map.of("type", "integer"), "photos", STRINGS, "caption", STRING,
+                    "call_to_action", STRING, "hashtags", STRINGS, "idea", STRING));
+    private static final JsonOutputFormat PLAN_FORMAT = JsonOutputFormat.builder()
+            .schema(JsonOutputFormat.Schema.builder()
+                    .putAdditionalProperty("type", JsonValue.from("object"))
+                    .putAdditionalProperty("additionalProperties", JsonValue.from(false))
+                    .putAdditionalProperty("required", JsonValue.from(List.of("posts", "warnings")))
+                    .putAdditionalProperty("properties", JsonValue.from(Map.of(
+                            "posts", Map.of("type", "array", "items", PLAN_POST),
+                            "warnings", STRINGS)))
+                    .build())
+            .build();
+
     private static final JsonMapper JSON = JsonMapper.builder()
             .propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -100,12 +119,73 @@ class AnthropicContentProvider implements ContentGenerationProvider {
 
     @Override
     public GenerationResult generate(GenerationRequest request) {
-        Message message;
+        Message message = send(params(request));
+        Output output = read(message, Output.class);
+        List<GenerationResult.Caption> captions = output.captions() == null ? List.of() : output.captions().stream()
+                .filter(c -> c != null)
+                .map(c -> new GenerationResult.Caption(c.caption(), c.callToAction(), c.hashtags()))
+                .toList();
+        return new GenerationResult(captions, output.carouselOrder(), output.carouselRationale(),
+                output.storyIdeas(), output.warnings(), (int) message.usage().inputTokens(),
+                (int) message.usage().outputTokens());
+    }
+
+    @Override
+    public PlanResult plan(PlanRequest request) {
+        Message message = send(params(request.photos(), ContentPrompt.planInstructions(request),
+                ContentPrompt.planSystem(), PLAN_FORMAT));
+        PlanOutput output = read(message, PlanOutput.class);
+        List<PlanResult.Post> posts = output.posts() == null ? List.of() : output.posts().stream()
+                .filter(p -> p != null)
+                .map(p -> new PlanResult.Post(p.slot(), p.photos(), p.caption(), p.callToAction(), p.hashtags(),
+                        p.idea()))
+                .toList();
+        return new PlanResult(posts, output.warnings(), (int) message.usage().inputTokens(),
+                (int) message.usage().outputTokens());
+    }
+
+    MessageCreateParams params(GenerationRequest request) {
+        return params(request.photos(), ContentPrompt.instructions(request), ContentPrompt.system(), FORMAT);
+    }
+
+    /** Each photo's preview labelled with its reference, then the escaped data and request, with a JSON schema. */
+    MessageCreateParams params(List<GenerationRequest.Photo> photos, String instructions, String system,
+            JsonOutputFormat format) {
+        List<ContentBlockParam> blocks = new ArrayList<>();
+        for (GenerationRequest.Photo photo : photos) {
+            blocks.add(ContentBlockParam.ofText(photo.ref() + ":"));
+            blocks.add(ContentBlockParam.ofImage(ImageBlockParam.builder()
+                    .source(Base64ImageSource.builder()
+                            .mediaType(Base64ImageSource.MediaType.IMAGE_JPEG)
+                            .data(Base64.getEncoder().encodeToString(photo.jpeg()))
+                            .build())
+                    .build()));
+        }
+        blocks.add(ContentBlockParam.ofText(instructions));
+        return MessageCreateParams.builder()
+                .model(properties.model())
+                .maxTokens(properties.maxTokens())
+                .system(system)
+                .outputConfig(OutputConfig.builder()
+                        .effort(OutputConfig.Effort.of(properties.effort()))
+                        .format(format)
+                        .build())
+                .addUserMessageOfBlockParams(blocks)
+                .putAdditionalHeader("anthropic-beta", FALLBACK_BETA)
+                .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
+                .build();
+    }
+
+    private Message send(MessageCreateParams params) {
         try {
-            message = client.messages().create(params(request));
+            return client.messages().create(params);
         } catch (AnthropicException e) {
             throw new ContentGenerationException(kind(e), e);
         }
+    }
+
+    /** The answer's JSON as {@code type}; a refusal, a cut-off answer, or unreadable JSON is a provider-neutral kind. */
+    private static <T> T read(Message message, Class<T> type) {
         if (message.stopReason().filter(StopReason.REFUSAL::equals).isPresent()) {
             throw new ContentGenerationException(Kind.REFUSED);
         }
@@ -116,48 +196,16 @@ class AnthropicContentProvider implements ContentGenerationProvider {
                 .flatMap(block -> block.text().stream())
                 .map(TextBlock::text)
                 .collect(Collectors.joining());
-        Output output;
+        T output;
         try {
-            output = JSON.readValue(text, Output.class);
+            output = JSON.readValue(text, type);
         } catch (JacksonException e) {
             throw new ContentGenerationException(Kind.INVALID_OUTPUT, e);
         }
         if (output == null) {
             throw new ContentGenerationException(Kind.INVALID_OUTPUT);
         }
-        List<GenerationResult.Caption> captions = output.captions() == null ? List.of() : output.captions().stream()
-                .filter(c -> c != null)
-                .map(c -> new GenerationResult.Caption(c.caption(), c.callToAction(), c.hashtags()))
-                .toList();
-        return new GenerationResult(captions, output.carouselOrder(), output.carouselRationale(),
-                output.storyIdeas(), output.warnings(), (int) message.usage().inputTokens(),
-                (int) message.usage().outputTokens());
-    }
-
-    MessageCreateParams params(GenerationRequest request) {
-        List<ContentBlockParam> blocks = new ArrayList<>();
-        for (GenerationRequest.Photo photo : request.photos()) {
-            blocks.add(ContentBlockParam.ofText(photo.ref() + ":"));
-            blocks.add(ContentBlockParam.ofImage(ImageBlockParam.builder()
-                    .source(Base64ImageSource.builder()
-                            .mediaType(Base64ImageSource.MediaType.IMAGE_JPEG)
-                            .data(Base64.getEncoder().encodeToString(photo.jpeg()))
-                            .build())
-                    .build()));
-        }
-        blocks.add(ContentBlockParam.ofText(ContentPrompt.instructions(request)));
-        return MessageCreateParams.builder()
-                .model(properties.model())
-                .maxTokens(properties.maxTokens())
-                .system(ContentPrompt.system())
-                .outputConfig(OutputConfig.builder()
-                        .effort(OutputConfig.Effort.of(properties.effort()))
-                        .format(FORMAT)
-                        .build())
-                .addUserMessageOfBlockParams(blocks)
-                .putAdditionalHeader("anthropic-beta", FALLBACK_BETA)
-                .putAdditionalBodyProperty("fallbacks", JsonValue.from("default"))
-                .build();
+        return output;
     }
 
     /** Most specific first: what can be retried later, and what needs someone to change the setup or input. */
@@ -189,4 +237,11 @@ class AnthropicContentProvider implements ContentGenerationProvider {
             List<String> warnings) {}
 
     record OutputCaption(String caption, String callToAction, List<String> hashtags) {}
+
+    /** A plan as {@link #PLAN_FORMAT} defines it. */
+    record PlanOutput(List<PlanOutputPost> posts, List<String> warnings) {}
+
+    record PlanOutputPost(
+            Integer slot, List<String> photos, String caption, String callToAction, List<String> hashtags,
+            String idea) {}
 }

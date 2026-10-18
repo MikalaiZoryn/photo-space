@@ -19,6 +19,7 @@ public class TestContentProvider {
     /** Failures to throw, one per call, before answering normally again. */
     public static final Queue<ContentGenerationException.Kind> FAILURES = new ConcurrentLinkedQueue<>();
     public static final List<GenerationRequest> REQUESTS = new CopyOnWriteArrayList<>();
+    public static final List<PlanRequest> PLAN_REQUESTS = new CopyOnWriteArrayList<>();
 
     @Bean
     @Primary
@@ -43,6 +44,16 @@ public class TestContentProvider {
                     throw new ContentGenerationException(failure);
                 }
                 return mock.generate(request);
+            }
+
+            @Override
+            public PlanResult plan(PlanRequest request) {
+                PLAN_REQUESTS.add(request);
+                ContentGenerationException.Kind failure = FAILURES.poll();
+                if (failure != null) {
+                    throw new ContentGenerationException(failure);
+                }
+                return mock.plan(request);
             }
         };
     }

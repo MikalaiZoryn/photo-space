@@ -15,7 +15,9 @@ enum DashboardWidget {
     GALLERIES,
     /** The audit log, which only owners may read. */
     RECENT_ACTIVITY,
-    QUICK_ACTIONS;
+    QUICK_ACTIONS,
+    /** The Content Studio posts planned or posted this week, against the weekly goal. */
+    THIS_WEEK_POSTS;
 
     boolean ownerOnly() {
         return this == RECENT_ACTIVITY;

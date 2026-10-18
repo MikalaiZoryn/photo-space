@@ -29,9 +29,9 @@ const CARDS: Card[] = [
   },
   {
     id: 'content-studio',
-    href: paths.contentStudio(),
+    href: paths.contentStudioSettings(),
     title: 'Content Studio',
-    description: 'The brand profile that AI drafts follow.',
+    description: 'Posting goal, plan template, and brand profile.',
     icon: Sparkles,
   },
 ]

@@ -280,6 +280,62 @@ public class AssetService {
         }
     }
 
+    // --- Used by the Content Studio, which authorizes access when it loads the plan or post. ---
+
+    /** Instagram's feed width; exports are this wide unless the preview's crop is smaller. */
+    static final int EXPORT_WIDTH = 1080;
+
+    /** The {@code READY} photos of one session in upload order, with their upright size. */
+    @Transactional(readOnly = true)
+    public List<ReadyPhoto> readyPhotos(UUID workspaceId, UUID sessionId) {
+        return jdbc.sql("""
+                        SELECT id, width, height FROM photo_assets
+                         WHERE workspace_id = :workspaceId AND session_id = :sessionId AND status = 'READY'
+                         ORDER BY created_at, id
+                        """)
+                .param("workspaceId", workspaceId)
+                .param("sessionId", sessionId)
+                .query((rs, n) -> new ReadyPhoto(rs.getObject("id", UUID.class), rs.getInt("width"), rs.getInt("height")))
+                .list();
+    }
+
+    /**
+     * A short-lived URL that downloads a {@code READY} photo of this session cropped to 4:5, named after the
+     * uploaded file. The export is rendered from the metadata-free preview the first time a crop is asked for and
+     * kept under a key named after the crop. Empty if the photo is not {@code READY}, not of this session, or not in
+     * this workspace.
+     */
+    public Optional<URI> exportUrl(UUID workspaceId, UUID sessionId, UUID assetId, Crop crop, Duration validFor)
+            throws IOException {
+        Optional<AssetRow> found = find(workspaceId, assetId, false)
+                .filter(row -> row.status() == AssetStatus.READY && sessionId.equals(row.sessionId()));
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        AssetRow asset = found.get();
+        String key = AssetKeys.export(workspaceId, assetId, crop);
+        if (storage.size(key).isEmpty()) {
+            Path file = Files.createTempFile("preview-", ".jpg");
+            try {
+                storage.download(asset.previewKey(), file);
+                storage.upload(key, ImageProcessor.export(Files.readAllBytes(file), crop, EXPORT_WIDTH), "image/jpeg");
+            } finally {
+                Files.deleteIfExists(file);
+            }
+        }
+        String name = asset.originalFilename() == null ? "photo.jpg" : asset.originalFilename();
+        return Optional.of(storage.presignAttachment(key, FileNames.exportOf(name), "image/jpeg", validFor));
+    }
+
+    /** A short-lived URL that downloads a {@code READY} photo's original, for the post kit. Empty otherwise. */
+    @Transactional(readOnly = true)
+    public Optional<URI> originalUrl(UUID workspaceId, UUID sessionId, UUID assetId, Duration validFor) {
+        return find(workspaceId, assetId, false)
+                .filter(row -> row.status() == AssetStatus.READY && sessionId.equals(row.sessionId()))
+                .map(row -> storage.presignAttachment(row.originalKey(), row.originalFilename(), row.contentType(),
+                        validFor));
+    }
+
     // --- Used by processing and cleanup, which run without a signed-in user. ---
 
     Optional<AssetRow> findForProcessing(UUID workspaceId, UUID assetId) {
@@ -426,6 +482,9 @@ public class AssetService {
     public record UploadTarget(URI url, String method, Map<String, String> headers, Instant expiresAt) {}
 
     public record UploadView(AssetView asset, UploadTarget upload) {}
+
+    /** A ready photo's upright size in pixels, for choosing and cropping photos without loading them. */
+    public record ReadyPhoto(UUID id, int width, int height) {}
 
     /** An image without a session. {@code url} is set only when {@code READY} and expires after a few minutes. */
     public record StandaloneImage(UUID id, AssetStatus status, URI url) {}

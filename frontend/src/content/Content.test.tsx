@@ -37,6 +37,7 @@ function batch(overrides: Partial<ContentBatch> = {}): ContentBatch {
     id: 'b-1',
     sessionId: 's-1',
     sessionTitle: 'Family session',
+    kind: 'CAPTIONS',
     status: 'SUCCEEDED',
     sessionType: 'Family',
     notes: 'Picnic by the lake.',
@@ -75,6 +76,7 @@ function draft(overrides: Partial<ContentDraft> = {}): ContentDraft {
     approvedAt: null,
     updatedAt: '2026-10-16T10:00:10Z',
     checks: [],
+    rules: [],
     ...overrides,
   }
 }
@@ -87,9 +89,14 @@ const settings = { provider: 'mock', model: 'mock-captions-1', maxPhotos: 2, max
 
 describe('Content helpers', () => {
   it('reads content routes from the hash', () => {
-    expect(parseRoute('#/content')).toEqual({ page: 'content' })
+    expect(parseRoute('#/content')).toEqual({ page: 'content', view: 'calendar' })
+    expect(parseRoute(paths.content('review'))).toEqual({ page: 'content', view: 'review' })
+    expect(parseRoute('#/content?view=nonsense')).toEqual({ page: 'content', view: 'calendar' })
     expect(parseRoute(paths.contentBatch('b 1'))).toEqual({ page: 'contentBatch', id: 'b 1' })
-    expect(parseRoute('#/content/batches')).toEqual({ page: 'content' })
+    expect(parseRoute('#/content/batches')).toEqual({ page: 'content', view: 'calendar' })
+    expect(parseRoute(paths.contentPlan('s 1'))).toEqual({ page: 'contentPlan', sessionId: 's 1' })
+    expect(parseRoute(paths.contentPost('p-1'))).toEqual({ page: 'contentPost', id: 'p-1' })
+    expect(parseRoute(paths.contentPostKit('p-1'))).toEqual({ page: 'contentPostKit', id: 'p-1' })
   })
 
   it('builds the post text and reads typed hashtags', () => {
@@ -298,16 +305,20 @@ describe('Content studio', () => {
     expect((within(form).getByLabelText('Caption') as HTMLTextAreaElement).value).toBe('Original')
   })
 
-  it('lists batches and links to the brand profile in Content Studio', async () => {
-    renderWorkspace('#/content', {
+  it('lists caption batches in the Content Studio and links to its settings', async () => {
+    renderWorkspace('#/content?view=captions', {
       [`GET ${CONTENT}/batches`]: () => page([batch({ approvedCount: 1 })]),
     })
 
     const list = await screen.findByRole('list', { name: 'Content batches' })
     expect(within(list).getByRole('link', { name: 'Family session' }).getAttribute('href')).toBe('#/content/batches/b-1')
     expect(within(list).getByText(/2 drafts, 1 approved/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Content' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('link', { name: 'Content Studio' }).getAttribute('href')).toBe('#/settings/content-studio')
+    const nav = screen.getByRole('navigation', { name: 'Workspace sections' })
+    expect(within(nav).getByRole('link', { name: 'Content Studio' }).getAttribute('aria-current')).toBe('page')
+    const views = screen.getByRole('navigation', { name: 'Content Studio views' })
+    expect(within(views).getByRole('link', { name: 'Caption drafts' }).getAttribute('aria-current')).toBe('page')
+    const main = screen.getByRole('main')
+    expect(within(main).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('#/settings/content-studio')
     expect(screen.queryByRole('form', { name: 'Brand profile' })).toBeNull()
   })
 

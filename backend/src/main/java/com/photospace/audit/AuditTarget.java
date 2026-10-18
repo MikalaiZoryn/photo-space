@@ -9,6 +9,8 @@ public enum AuditTarget {
     GALLERY,
     SHARE_LINK,
     CONTENT_DRAFT,
+    /** A planned Instagram post of a session's content plan. */
+    CONTENT_POST,
     /** A workspace's branding; the target ID is the workspace's. */
     BRANDING,
     INQUIRY_FORM,

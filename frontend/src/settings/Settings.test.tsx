@@ -29,9 +29,11 @@ describe('Settings', () => {
     renderWorkspace('#/settings', {})
 
     await screen.findByRole('list', { name: 'Settings' })
-    for (const name of ['Automation', 'Members', 'Inquiry form', 'Content Studio']) {
+    for (const name of ['Automation', 'Members', 'Inquiry form']) {
       expect(within(nav()).queryByRole('link', { name })).toBeNull()
     }
+    // The sidebar's Content Studio is the studio itself; its settings live on the Settings page.
+    expect(within(nav()).getByRole('link', { name: 'Content Studio' }).getAttribute('href')).toBe('#/content')
   })
 
   it('highlights Settings on a settings page, with a link back', async () => {

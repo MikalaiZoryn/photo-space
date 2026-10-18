@@ -121,6 +121,19 @@ The session cookie is `Secure`. Chrome and Firefox accept it on `http://localhos
 | `POST /api/workspaces/{id}/content/batches/{batchId}/retry`, `…/regenerate` | Members. Retry runs a `FAILED` batch again; regenerate creates a new batch from the same input (201). |
 | `GET`, `PUT /api/workspaces/{id}/content/drafts/{draftId}` | Members. `GET` returns `{draft, versions}`. `PUT {version, draft: {caption, callToAction, hashtags}}` saves a new version. |
 | `POST /api/workspaces/{id}/content/drafts/{draftId}/status` | Members. `{version, status: "APPROVED" \| "DRAFT"}`; approves exactly that version. |
+| `GET`, `PUT /api/workspaces/{id}/content/studio-settings` | Members. Defaults at version 0. `PUT` takes `{version, settings: {weeklyGoal, autoPlans, sneakPeekDays, dripPosts, dripSpacingDays, studioArea}}`. |
+| `GET /api/workspaces/{id}/content/plans?toReview=false&page=0&size=25` | Members. Session plans, most recently changed first, with post counts. `toReview=true` keeps plans with posts to approve, or still generating or failed. |
+| `GET`, `POST /api/workspaces/{id}/content/sessions/{sessionId}/plan` | Members. `GET` is 404 until the session has a plan. `POST` creates it or refreshes it (untouched proposals are replaced; edited, approved, and posted posts stay); it is `PENDING` until its job finishes. |
+| `POST /api/workspaces/{id}/content/plans/{planId}/retry` | Members. Runs a `FAILED` plan generation again. |
+| `POST /api/workspaces/{id}/content/plans/{planId}/posts` | Members. Adds a post a person wrote: `{stage, format, photos, draft: {caption, callToAction, hashtags}, idea, plannedOn}` (201). |
+| `GET /api/workspaces/{id}/content/posts?sessionId=&from=&to=&status=&unscheduled=false&page=0&size=25` | Members. Posts in calendar order. `from`/`to` (inclusive, at most 62 days apart) keep posts planned or posted then; `status` is `PROPOSED`, `APPROVED`, `SCHEDULED`, or `POSTED`; `unscheduled=true` keeps approved posts without a day. |
+| `GET /api/workspaces/{id}/content/posts/{postId}` | Members. `{post, photos: [{photo, crop, customCrop}], draft}`; the draft carries the caption `rules`. |
+| `PUT /api/workspaces/{id}/content/posts/{postId}/schedule` | Members. `{version, plannedOn}`; `null` clears the day. |
+| `PUT /api/workspaces/{id}/content/posts/{postId}/photos` | Members. `{version, photos: [{assetId, crop: {x, y, width, height} \| null}]}`: ready photos of the session in posting order, crops 4:5 as fractions. An approved post goes back to review. |
+| `POST /api/workspaces/{id}/content/posts/{postId}/regenerate` | Members. `{version}`. Queues a new caption for this post alone; poll the post while `regenerating`. |
+| `GET /api/workspaces/{id}/content/posts/{postId}/kit` | Members. Approved posts only (409 otherwise): the text and each photo's 4:5 export and original as 10-minute download links. |
+| `POST /api/workspaces/{id}/content/posts/{postId}/posted` | Members. `{version, posted: true, postedOn, postUrl}` (an `https://` link, optional) after posting by hand, or `{version, posted: false}`. Approved posts only. Audited. |
+| `DELETE /api/workspaces/{id}/content/posts/{postId}?version=` | Members. Drops the post and its caption (204); 409 for a posted post. Audited. |
 | `GET /api/workspaces/{id}/tasks?status=&clientId=&sessionId=&assigneeId=&overdue=false&page=0&size=25` | Members. Open tasks first, then by due date (undated last). `overdue=true` keeps open tasks due before today in the workspace time zone. |
 | `POST /api/workspaces/{id}/tasks` | Members. `{title, description, dueDate, clientId, sessionId, assigneeId}`. New tasks are `OPEN`. |
 | `GET`, `PUT`, `DELETE /api/workspaces/{id}/tasks/{taskId}` | Members. `PUT` takes `{version, task: {…}}`; `DELETE` returns 204. |
@@ -263,11 +276,26 @@ With the stack running and dev sign-in:
 6. To try the embed, save the snippet in an HTML file and open it from `http://localhost:8000` (`python3 -m http.server 8000`) with the snippet's URL pointing at `http://localhost:5173`. Locally there are no framing headers; deployed, only `/embed/*` can be framed.
 7. **Unpublish**: the private window shows "This form is not available", and existing inquiries stay. In another user's window, the inquiry URLs show "not found".
 
+### Content Studio: a quick manual check
+
+With the stack running, dev sign-in, and the default mock provider. Automatic plans wait until no new photo has become ready for 30 minutes; to see one sooner, start the backend with `CONTENT_PLANS_SETTLE_AFTER=1m` (the poller runs every minute).
+
+1. Open **Settings** › **Content Studio**. Set **Feed posts per week** to 3 and **Studio area** to your city, and **Save settings**.
+2. Upload a dozen photos to a session. About a minute after the last one is ready (with the setting above), the session page's **Content plan** panel shows a plan. Or choose **Plan posts** there right away.
+3. **Open plan**: posts are grouped as **Sneak peek**, **Delivery**, and **Later post**. The sneak peek has a day; the others say their day is set when the gallery is published.
+4. Open the sneak peek. Move a photo up, choose its crop button, drag the 4:5 frame (or use the arrow keys), and **Save photos**. Check the caption checks under the caption (for example, mention the studio area), save, and **Approve**.
+5. **Open post kit**: the photos show cropped to 4:5 in posting order, with **Save** and **Original** links, and **Copy caption and hashtags**. On a phone on the same network, the kit fits the screen.
+6. Back on the post, **Mark as posted** with today's date. In **Content Studio** › **Calendar**, the post shows on its day and the week's bar counts it.
+7. Publish the session's gallery. The plan's delivery and later posts get days counted from today, and the calendar shows them. Drag one to another day.
+8. Edit one post's caption, then **Refresh plan**: the edited, approved, and posted posts stay; the others are replaced.
+9. Type six hashtags into a caption: saving is blocked with "Instagram allows at most 5 hashtags."
+10. In another user's window, the post and plan URLs show "not found".
+
 ### Dashboard: a quick manual check
 
 With the stack running and dev sign-in:
 
-1. Sign in. The app opens on **Dashboard**, the first sidebar item. An owner sees all eight widgets; a member sees all but **Recent activity**.
+1. Sign in. The app opens on **Dashboard**, the first sidebar item. An owner sees the default widgets; a member sees all but **Recent activity**. **This week's posts** can be added from **Add widgets**.
 2. **Customize**. Drag **My tasks** by its handle above **Upcoming sessions**. With the keyboard: Tab to a handle, press Space, use the arrow keys, and press Space again.
 3. Make a widget full width, remove one, and add it back from **Add widgets**. **Save** and reload the page: the layout stays. Open the app in another browser signed in as another member: their dashboard is unchanged.
 4. **Customize** in two tabs, save in one, then save in the other: the second explains that the dashboard changed in another window.

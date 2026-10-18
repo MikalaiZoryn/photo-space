@@ -80,7 +80,7 @@ final class ContentValidator {
         return List.copyOf(order);
     }
 
-    private static List<String> suggestions(List<String> values, int max) {
+    static List<String> suggestions(List<String> values, int max) {
         List<String> result = new ArrayList<>();
         for (String value : nonNull(values)) {
             String cleaned = suggestion(value);

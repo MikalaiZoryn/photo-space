@@ -11,6 +11,9 @@ import com.photospace.content.ContentGenerationException.Kind;
 import com.photospace.content.ContentProperties;
 import com.photospace.content.GenerationRequest;
 import com.photospace.content.GenerationResult;
+import com.photospace.content.PlanRequest;
+import com.photospace.content.PlanResult;
+import com.photospace.content.PostStage;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -121,6 +124,33 @@ class AnthropicContentProviderTest {
                 .contains(AnthropicContentProvider.FALLBACK_BETA);
     }
 
+    @Test
+    void sendsThePlanRequestAndReadsTheProposedPosts() {
+        respond(200, message("end_turn", """
+                {"posts":[{"slot":1,"photos":["photo-2"],"caption":"A first peek.","call_to_action":"Send this to a friend.",
+                 "hashtags":["newborn"],"idea":""}],"warnings":["No studio area given."]}"""));
+
+        PlanResult result = provider.plan(new PlanRequest(
+                new GenerationRequest.Brand(null, null, null, null),
+                "Newborn",
+                "Kraków",
+                List.of(new GenerationRequest.Photo("photo-1", JPEG_1), new GenerationRequest.Photo("photo-2", JPEG_2)),
+                List.of(new PlanRequest.Slot(1, PostStage.SNEAK_PEEK, PlanRequest.SlotFormat.FEED, 1, 3))));
+
+        assertThat(result.posts()).containsExactly(new PlanResult.Post(
+                1, List.of("photo-2"), "A first peek.", "Send this to a friend.", List.of("newborn"), ""));
+        assertThat(result.warnings()).containsExactly("No studio area given.");
+        assertThat(result.inputTokens()).isEqualTo(1234);
+        String body = requestBody.get();
+        assertThat(JsonPath.<List<String>>read(body, "$.output_config.format.schema.required"))
+                .containsExactly("posts", "warnings");
+        assertThat(body).contains("How to plan");
+        assertThat(JsonPath.<List<String>>read(body, "$.messages[0].content[*].type"))
+                .containsExactly("text", "image", "text", "image", "text");
+        assertThat(JsonPath.<String>read(body, "$.messages[0].content[4].text"))
+                .contains("<area>Kraków</area>", "- slot 1: sneak peek");
+    }
+
     @ParameterizedTest
     @CsvSource({
         "429, rate_limit_error, RATE_LIMITED",
@@ -197,6 +227,7 @@ class AnthropicContentProviderTest {
         return new GenerationRequest(
                 new GenerationRequest.Brand("Warm", "Families", null, "clichés"),
                 "Family",
+                null,
                 "Picnic & kites",
                 List.of(new GenerationRequest.Photo("photo-1", JPEG_1), new GenerationRequest.Photo("photo-2", JPEG_2)),
                 2,

@@ -105,6 +105,40 @@ final class ImageProcessor {
         }
     }
 
+    /**
+     * Renders a 4:5 export from a preview this class made: the crop, scaled down to at most
+     * {@code exportWidth} wide (never up), as a JPEG without metadata.
+     */
+    static byte[] export(byte[] previewJpeg, Crop crop, int exportWidth) throws IOException {
+        BufferedImage preview = ImageIO.read(new java.io.ByteArrayInputStream(previewJpeg));
+        if (preview == null) {
+            throw new IOException("The preview could not be read");
+        }
+        int x = (int) Math.round(crop.x() * preview.getWidth());
+        int y = (int) Math.round(crop.y() * preview.getHeight());
+        int w = Math.min(preview.getWidth() - x, Math.max(1, (int) Math.round(crop.width() * preview.getWidth())));
+        int h = Math.min(preview.getHeight() - y, Math.max(1, (int) Math.round(crop.height() * preview.getHeight())));
+        BufferedImage cropped = toRgb(preview).getSubimage(x, y, w, h);
+        int targetWidth = Math.min(exportWidth, w);
+        int targetHeight = (int) Math.round(targetWidth / Crop.RATIO);
+        return jpeg(cropped.getWidth() == targetWidth && cropped.getHeight() == targetHeight
+                ? copy(cropped)
+                : fitExactly(cropped, targetWidth, targetHeight));
+    }
+
+    private static BufferedImage fitExactly(BufferedImage image, int targetW, int targetH) {
+        BufferedImage current = image;
+        while (current.getWidth() / 2 >= targetW && current.getHeight() / 2 >= targetH) {
+            current = resize(current, current.getWidth() / 2, current.getHeight() / 2);
+        }
+        return resize(current, targetW, targetH);
+    }
+
+    /** A sub-image shares its parent's pixels; the encoder needs an image of its own. */
+    private static BufferedImage copy(BufferedImage image) {
+        return resize(image, image.getWidth(), image.getHeight());
+    }
+
     /** Opaque RGB on white, whatever the source's color model (transparency, palette, grayscale). */
     private static BufferedImage toRgb(BufferedImage source) {
         if (source.getType() == BufferedImage.TYPE_INT_RGB) {
