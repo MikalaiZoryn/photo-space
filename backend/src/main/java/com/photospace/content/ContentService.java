@@ -22,12 +22,15 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,7 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 class ContentService {
 
     private static final String BATCH_COLUMNS = """
-            b.id, b.workspace_id, b.session_id, s.title AS session_title, b.status, b.session_type, b.notes,
+            b.id, b.workspace_id, b.session_id, s.title AS session_title, b.kind, b.status, b.session_type, b.notes,
             b.caption_count, b.include_hashtags, b.include_call_to_action, b.run, b.failure_reason, b.provider,
             b.model, b.prompt_version, b.carousel_rationale, b.story_ideas, b.warnings, b.created_at,
             b.completed_at,
@@ -56,7 +59,8 @@ class ContentService {
             """;
     private static final String DRAFT_COLUMNS = """
             d.id, d.batch_id, d.position, d.status, d.version, d.approved_version, d.approved_at, d.updated_at,
-            v.caption, v.call_to_action, v.hashtags, v.source, b.notes AS batch_notes""";
+            v.caption, v.call_to_action, v.hashtags, v.source, b.notes AS batch_notes,
+            b.session_type AS batch_session_type""";
     private static final String DRAFT_FROM = """
              FROM content_drafts d
              JOIN content_draft_versions v ON v.draft_id = d.id AND v.version = d.version
@@ -68,16 +72,19 @@ class ContentService {
     private final AssetService assets;
     private final JobService jobs;
     private final BrandProfileService brands;
+    private final StudioSettingsService settings;
     private final ContentProperties properties;
     private final AuditService audit;
 
     ContentService(JdbcClient jdbc, PhotoSessionService sessions, AssetService assets, JobService jobs,
-            BrandProfileService brands, ContentProperties properties, AuditService audit) {
+            BrandProfileService brands, StudioSettingsService settings, ContentProperties properties,
+            AuditService audit) {
         this.jdbc = jdbc;
         this.sessions = sessions;
         this.assets = assets;
         this.jobs = jobs;
         this.brands = brands;
+        this.settings = settings;
         this.properties = properties;
         this.audit = audit;
     }
@@ -130,17 +137,18 @@ class ContentService {
                 .param("sessionId", session.id())
                 .param("assetIds", photos.toArray(UUID[]::new))
                 .update();
-        jobs.enqueue(workspace.workspaceId(), GenerateContentJob.TYPE, id, jobKey(id, 1));
+        enqueue(workspace.workspaceId(), ContentBatchKind.CAPTIONS, id, 1);
         return get(workspace, id);
     }
 
     /**
-     * Batches, newest first, optionally of one session. {@code toReview} keeps only batches with drafts that are
-     * not approved yet.
+     * Caption batches, newest first, optionally of one session. {@code toReview} keeps only batches with drafts
+     * that are not approved yet. Plan batches are listed with their plans instead.
      */
     @Transactional(readOnly = true)
     PageView<BatchView> list(WorkspaceContext workspace, UUID sessionId, boolean toReview, PageQuery page) {
-        String where = " WHERE b.workspace_id = :workspaceId" + (sessionId == null ? "" : " AND b.session_id = :sessionId")
+        String where = " WHERE b.workspace_id = :workspaceId AND b.kind = 'CAPTIONS'"
+                + (sessionId == null ? "" : " AND b.session_id = :sessionId")
                 + (toReview
                         ? " AND EXISTS (SELECT 1 FROM content_drafts d WHERE d.batch_id = b.id AND d.status = 'DRAFT')"
                         : "");
@@ -180,12 +188,12 @@ class ContentService {
                 .sorted((a, b) -> Integer.compare(a.carouselPosition(), b.carouselPosition()))
                 .map(BatchPhoto::assetId)
                 .toList();
-        List<String> brandText = brandText(workspace.workspaceId());
+        ReviewContext review = reviewContext(workspace.workspaceId());
         List<DraftView> drafts = jdbc.sql("SELECT " + DRAFT_COLUMNS + DRAFT_FROM
                         + " WHERE d.workspace_id = :workspaceId AND d.batch_id = :batchId ORDER BY d.position")
                 .param("workspaceId", workspace.workspaceId())
                 .param("batchId", batchId)
-                .query((rs, n) -> draftView(rs, brandText))
+                .query((rs, n) -> draftView(rs, review))
                 .list();
         return new BatchDetail(batch, photos, carousel, drafts);
     }
@@ -206,7 +214,7 @@ class ContentService {
                     .param("id", batchId)
                     .param("workspaceId", workspace.workspaceId())
                     .update();
-            jobs.enqueue(workspace.workspaceId(), GenerateContentJob.TYPE, batchId, jobKey(batchId, batch.run() + 1));
+            enqueue(workspace.workspaceId(), batch.kind(), batchId, batch.run() + 1);
         }
         return get(workspace, batchId);
     }
@@ -218,6 +226,9 @@ class ContentService {
     @Transactional
     BatchDetail regenerate(WorkspaceContext workspace, UUID batchId) {
         BatchView batch = findBatch(workspace.workspaceId(), batchId).orElseThrow(NotFoundException::new);
+        if (batch.kind() == ContentBatchKind.PLAN) {
+            throw new ConflictException("This batch wrote a session plan. Use Refresh plan on the session instead.");
+        }
         List<UUID> assetIds = jdbc.sql("""
                         SELECT asset_id FROM content_batch_assets
                          WHERE batch_id = :id AND workspace_id = :workspaceId ORDER BY position""")
@@ -262,20 +273,7 @@ class ContentService {
             return current;
         }
         int next = current.version() + 1;
-        jdbc.sql("""
-                        INSERT INTO content_draft_versions (draft_id, workspace_id, version, caption, call_to_action,
-                                                            hashtags, source, created_by)
-                        VALUES (:draftId, :workspaceId, :version, :caption, :callToAction, CAST(:hashtags AS text[]),
-                                'EDITED', :userId)
-                        """)
-                .param("draftId", draftId)
-                .param("workspaceId", workspace.workspaceId())
-                .param("version", next)
-                .param("caption", text.caption())
-                .param("callToAction", text.callToAction())
-                .param("hashtags", text.hashtags().toArray(String[]::new))
-                .param("userId", workspace.userId())
-                .update();
+        insertVersion(workspace.workspaceId(), draftId, next, text, workspace.userId());
         jdbc.sql("""
                         UPDATE content_drafts
                            SET version = :version, status = 'DRAFT', approved_version = NULL, approved_by = NULL,
@@ -322,9 +320,9 @@ class ContentService {
 
     // --- Used by GenerateContentJob, which runs without a signed-in user and only moves a PENDING batch on. ---
 
-    Optional<PendingBatch> findPending(UUID workspaceId, UUID batchId) {
+    Optional<PendingBatch> findPending(UUID workspaceId, UUID batchId, ContentBatchKind kind) {
         return findBatch(workspaceId, batchId)
-                .filter(batch -> batch.status() == ContentBatchStatus.PENDING)
+                .filter(batch -> batch.status() == ContentBatchStatus.PENDING && batch.kind() == kind)
                 .map(batch -> new PendingBatch(
                         batch.id(),
                         workspaceId,
@@ -384,32 +382,34 @@ class ContentService {
                     .param("assetId", sentPhotos.get(order.get(position)))
                     .update();
         }
-        for (int position = 0; position < content.captions().size(); position++) {
-            DraftText text = content.captions().get(position);
-            UUID draftId = jdbc.sql("""
-                            INSERT INTO content_drafts (workspace_id, batch_id, position, status, version)
-                            VALUES (:workspaceId, :batchId, :position, 'DRAFT', 1)
-                            RETURNING id
-                            """)
-                    .param("workspaceId", batch.workspaceId())
-                    .param("batchId", batch.id())
-                    .param("position", position)
-                    .query(UUID.class)
-                    .single();
-            jdbc.sql("""
-                            INSERT INTO content_draft_versions (draft_id, workspace_id, version, caption,
-                                                                call_to_action, hashtags, source)
-                            VALUES (:draftId, :workspaceId, 1, :caption, :callToAction, CAST(:hashtags AS text[]),
-                                    'GENERATED')
-                            """)
-                    .param("draftId", draftId)
-                    .param("workspaceId", batch.workspaceId())
-                    .param("caption", text.caption())
-                    .param("callToAction", text.callToAction())
-                    .param("hashtags", text.hashtags().toArray(String[]::new))
-                    .update();
+        for (DraftText text : content.captions()) {
+            insertDraft(batch.workspaceId(), batch.id(), text, null);
         }
         return true;
+    }
+
+    /**
+     * Records what produced a plan batch's posts and ends it as succeeded. Returns false if the batch was no longer
+     * pending; the caller then stores nothing.
+     */
+    boolean completePlanBatch(UUID workspaceId, UUID batchId, String provider, String model, Integer inputTokens,
+            Integer outputTokens, List<String> warnings) {
+        return jdbc.sql("""
+                        UPDATE content_batches
+                           SET status = 'SUCCEEDED', failure_reason = NULL, provider = :provider, model = :model,
+                               prompt_version = :promptVersion, input_tokens = :inputTokens,
+                               output_tokens = :outputTokens, warnings = CAST(:warnings AS text[]), completed_at = now()
+                         WHERE id = :id AND workspace_id = :workspaceId AND status = 'PENDING' AND kind = 'PLAN'
+                        """)
+                .param("provider", provider)
+                .param("model", model)
+                .param("promptVersion", ContentPrompt.PLAN_VERSION)
+                .param("inputTokens", inputTokens)
+                .param("outputTokens", outputTokens)
+                .param("warnings", warnings.toArray(String[]::new))
+                .param("id", batchId)
+                .param("workspaceId", workspaceId)
+                .update() == 1;
     }
 
     /** Ends a pending batch as failed. {@code reason} must be a fixed, user-facing sentence. */
@@ -452,14 +452,87 @@ class ContentService {
                 .update();
     }
 
-    // --- Internals. ---
+    // --- Used by plans and posts, whose text lives in drafts of a PLAN batch. ---
 
-    private static String jobKey(UUID batchId, int run) {
-        return GenerateContentJob.TYPE + ":" + batchId + ":" + run;
+    /** Queues the generation job a batch of this kind needs, once per run. */
+    void enqueue(UUID workspaceId, ContentBatchKind kind, UUID batchId, int run) {
+        String type = kind == ContentBatchKind.PLAN ? GeneratePlanJob.TYPE : GenerateContentJob.TYPE;
+        jobs.enqueue(workspaceId, type, batchId, type + ":" + batchId + ":" + run);
     }
 
-    /** Checks what annotations cannot: hashtag characters, repeats, and the length of the whole post. */
-    private static DraftText checked(DraftInput input) {
+    /** Queues one post's caption rewrite, once per post version. */
+    void enqueuePostRewrite(UUID workspaceId, UUID postId, int postVersion) {
+        jobs.enqueue(workspaceId, RegeneratePostJob.TYPE, postId,
+                RegeneratePostJob.TYPE + ":" + postId + ":" + postVersion);
+    }
+
+    /**
+     * Adds a draft to a batch after its other drafts. {@code editorId} is null for generated text, which becomes a
+     * {@code GENERATED} version 1; otherwise the person's text is an {@code EDITED} version 1.
+     */
+    UUID insertDraft(UUID workspaceId, UUID batchId, DraftText text, UUID editorId) {
+        UUID draftId = jdbc.sql("""
+                        INSERT INTO content_drafts (workspace_id, batch_id, position, status, version)
+                        SELECT :workspaceId, :batchId, coalesce(max(position) + 1, 0), 'DRAFT', 1
+                          FROM content_drafts WHERE batch_id = :batchId
+                        RETURNING id
+                        """)
+                .param("workspaceId", workspaceId)
+                .param("batchId", batchId)
+                .query(UUID.class)
+                .single();
+        insertVersion(workspaceId, draftId, 1, text, editorId);
+        return draftId;
+    }
+
+    /**
+     * Replaces a draft's text with newly generated text as its next version, and takes back any approval, since
+     * that was for the earlier text.
+     */
+    void appendGeneratedVersion(UUID workspaceId, UUID draftId, DraftText text) {
+        Integer next = jdbc.sql("""
+                        UPDATE content_drafts
+                           SET version = version + 1, status = 'DRAFT', approved_version = NULL, approved_by = NULL,
+                               approved_at = NULL, updated_at = now()
+                         WHERE id = :id AND workspace_id = :workspaceId
+                        RETURNING version
+                        """)
+                .param("id", draftId)
+                .param("workspaceId", workspaceId)
+                .query(Integer.class)
+                .single();
+        insertVersion(workspaceId, draftId, next, text, null);
+    }
+
+    /** Takes back a draft's approval because something it covered (such as a post's photos) changed. */
+    void withdrawApproval(UUID workspaceId, UUID draftId) {
+        jdbc.sql("""
+                        UPDATE content_drafts
+                           SET status = 'DRAFT', approved_version = NULL, approved_by = NULL, approved_at = NULL,
+                               updated_at = now()
+                         WHERE id = :id AND workspace_id = :workspaceId AND status = 'APPROVED'
+                        """)
+                .param("id", draftId)
+                .param("workspaceId", workspaceId)
+                .update();
+    }
+
+    /** Drafts as review shows them, by ID, with their caption rules. Other workspaces' drafts are left out. */
+    Map<UUID, DraftView> findDrafts(UUID workspaceId, Collection<UUID> draftIds) {
+        if (draftIds.isEmpty()) {
+            return Map.of();
+        }
+        ReviewContext review = reviewContext(workspaceId);
+        return jdbc.sql("SELECT " + DRAFT_COLUMNS + DRAFT_FROM + " WHERE d.workspace_id = :workspaceId AND d.id IN (:ids)")
+                .param("workspaceId", workspaceId)
+                .param("ids", draftIds)
+                .query((rs, n) -> draftView(rs, review))
+                .stream()
+                .collect(Collectors.toMap(DraftView::id, Function.identity()));
+    }
+
+    /** Checks an edited text: hashtag characters, repeats, and the length of the whole post. */
+    static DraftText checked(DraftInput input) {
         List<String> hashtags = new ArrayList<>();
         for (String tag : input.hashtags()) {
             if (!Hashtags.valid(tag)) {
@@ -477,10 +550,34 @@ class ContentService {
         return text;
     }
 
-    /** The text the photographer wrote themselves, which review hints compare drafts against. */
-    private List<String> brandText(UUID workspaceId) {
+    // --- Internals. ---
+
+    private void insertVersion(UUID workspaceId, UUID draftId, int version, DraftText text, UUID editorId) {
+        jdbc.sql("""
+                        INSERT INTO content_draft_versions (draft_id, workspace_id, version, caption, call_to_action,
+                                                            hashtags, source, created_by)
+                        VALUES (:draftId, :workspaceId, :version, :caption, :callToAction, CAST(:hashtags AS text[]),
+                                :source, :editorId)
+                        """)
+                .param("draftId", draftId)
+                .param("workspaceId", workspaceId)
+                .param("version", version)
+                .param("caption", text.caption())
+                .param("callToAction", text.callToAction())
+                .param("hashtags", text.hashtags().toArray(String[]::new))
+                .param("source", editorId == null ? DraftSource.GENERATED.name() : DraftSource.EDITED.name())
+                .param("editorId", editorId)
+                .update();
+    }
+
+    /**
+     * What review needs besides the draft: the text the photographer wrote themselves, which hints compare drafts
+     * against, and the studio area the caption rules look for.
+     */
+    private ReviewContext reviewContext(UUID workspaceId) {
         GenerationRequest.Brand brand = brands.forGeneration(workspaceId);
-        return Arrays.asList(brand.voice(), brand.audience(), brand.preferences(), brand.avoid());
+        return new ReviewContext(Arrays.asList(brand.voice(), brand.audience(), brand.preferences(), brand.avoid()),
+                settings.forWorkspace(workspaceId).studioArea());
     }
 
     private Optional<BatchView> findBatch(UUID workspaceId, UUID batchId) {
@@ -513,11 +610,11 @@ class ContentService {
                 return Optional.empty();
             }
         }
-        List<String> brandText = brandText(workspaceId);
+        ReviewContext review = reviewContext(workspaceId);
         return jdbc.sql("SELECT " + DRAFT_COLUMNS + DRAFT_FROM + " WHERE d.id = :id AND d.workspace_id = :workspaceId")
                 .param("id", draftId)
                 .param("workspaceId", workspaceId)
-                .query((rs, n) -> draftView(rs, brandText))
+                .query((rs, n) -> draftView(rs, review))
                 .optional();
     }
 
@@ -534,6 +631,7 @@ class ContentService {
                 rs.getObject("id", UUID.class),
                 rs.getObject("session_id", UUID.class),
                 rs.getString("session_title"),
+                ContentBatchKind.valueOf(rs.getString("kind")),
                 ContentBatchStatus.valueOf(rs.getString("status")),
                 rs.getString("session_type"),
                 rs.getString("notes"),
@@ -555,10 +653,10 @@ class ContentService {
                 instant(rs, "completed_at"));
     }
 
-    private static DraftView draftView(ResultSet rs, List<String> brandText) throws SQLException {
+    private static DraftView draftView(ResultSet rs, ReviewContext review) throws SQLException {
         DraftText text = new DraftText(
                 rs.getString("caption"), rs.getString("call_to_action"), strings(rs.getArray("hashtags")));
-        List<String> sources = new ArrayList<>(brandText);
+        List<String> sources = new ArrayList<>(review.brandText());
         sources.add(rs.getString("batch_notes"));
         return new DraftView(
                 rs.getObject("id", UUID.class),
@@ -573,7 +671,8 @@ class ContentService {
                 rs.getObject("approved_version", Integer.class),
                 instant(rs, "approved_at"),
                 instant(rs, "updated_at"),
-                ContentChecks.hints(text, sources));
+                ContentChecks.hints(text, sources),
+                CaptionRules.check(text, rs.getString("batch_session_type"), review.studioArea()));
     }
 
     private static List<String> strings(Array array) throws SQLException {
@@ -586,6 +685,8 @@ class ContentService {
     }
 
     private record BatchPhoto(UUID assetId, Integer carouselPosition) {}
+
+    private record ReviewContext(List<String> brandText, String studioArea) {}
 
     /** A batch the job still has to generate, with its photos in selection order. */
     record PendingBatch(
@@ -607,6 +708,7 @@ class ContentService {
             UUID id,
             UUID sessionId,
             String sessionTitle,
+            ContentBatchKind kind,
             ContentBatchStatus status,
             String sessionType,
             String notes,
@@ -635,7 +737,8 @@ class ContentService {
 
     /**
      * A draft's current version. {@code checks} are review hints for things the photographer did not write
-     * themselves, such as an account handle or a price (see {@link ContentChecks}).
+     * themselves, such as an account handle or a price (see {@link ContentChecks}); {@code rules} are the caption
+     * rules it breaks (see {@link CaptionRules}).
      */
     record DraftView(
             UUID id,
@@ -650,7 +753,8 @@ class ContentService {
             Integer approvedVersion,
             Instant approvedAt,
             Instant updatedAt,
-            List<String> checks) {}
+            List<String> checks,
+            List<CaptionRules.CaptionRule> rules) {}
 
     record DraftVersionView(
             int version, String caption, String callToAction, List<String> hashtags, DraftSource source,

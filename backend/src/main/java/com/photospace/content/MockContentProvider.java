@@ -69,6 +69,56 @@ class MockContentProvider implements ContentGenerationProvider {
                 null);
     }
 
+    @Override
+    public PlanResult plan(PlanRequest request) {
+        pause();
+        String type = request.sessionType() == null || request.sessionType().isBlank()
+                ? "photo"
+                : request.sessionType().strip().toLowerCase(Locale.ROOT);
+        String area = request.studioArea() == null ? "" : " in " + request.studioArea();
+        List<String> all = request.photos().stream().map(GenerationRequest.Photo::ref).toList();
+        List<String> unused = new ArrayList<>(all);
+        long feedSlots = request.slots().stream().filter(s -> s.format() == PlanRequest.SlotFormat.FEED).count();
+        int feedSeen = 0;
+        List<PlanResult.Post> posts = new ArrayList<>();
+        for (PlanRequest.Slot slot : request.slots()) {
+            List<String> photos;
+            if (slot.format() == PlanRequest.SlotFormat.FEED) {
+                feedSeen++;
+                long laterFeedSlots = feedSlots - feedSeen;
+                // The delivery carousel gets its minimum first; later posts share what is left.
+                int wanted = slot.stage() == PostStage.DELIVERY
+                        ? (int) Math.min(slot.maxPhotos(), Math.max(slot.minPhotos(), unused.size() - laterFeedSlots))
+                        : slot.minPhotos();
+                photos = new ArrayList<>(unused.subList(0, Math.min(wanted, unused.size())));
+                unused.removeAll(photos);
+            } else {
+                photos = all.subList(0, Math.min(slot.maxPhotos(), all.size()));
+            }
+            if (photos.isEmpty()) {
+                continue;
+            }
+            boolean story = slot.format() == PlanRequest.SlotFormat.STORY;
+            String caption = switch (slot.stage()) {
+                case SNEAK_PEEK -> "A first peek at this %s session%s. The full gallery is on its way.";
+                case DELIVERY -> "The gallery from this %s session%s is ready. A few favourite frames.";
+                case DRIP -> "One more favourite from this %s session%s.";
+            };
+            posts.add(new PlanResult.Post(
+                    slot.number(),
+                    photos,
+                    caption.formatted(type, area),
+                    "Know someone planning a session? Send this to them.",
+                    story ? List.of() : hashtags(type).subList(0, Math.min(5, hashtags(type).size())),
+                    switch (slot.format()) {
+                        case REEL -> "Sample Reel from the mock provider: the photos in order, cover on the first.";
+                        case STORY -> "Sample Story from the mock provider: one photo per frame, a question sticker.";
+                        case FEED -> "";
+                    }));
+        }
+        return new PlanResult(posts, List.of(), null, null);
+    }
+
     private void pause() {
         if (delay.isZero()) {
             return;

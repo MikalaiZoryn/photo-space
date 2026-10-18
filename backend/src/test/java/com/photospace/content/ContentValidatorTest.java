@@ -18,7 +18,7 @@ class ContentValidatorTest {
         for (int i = 1; i <= photos; i++) {
             list.add(new GenerationRequest.Photo("photo-" + i, new byte[] {1}));
         }
-        return new GenerationRequest(NO_BRAND, "Family", "Notes", list, captions, hashtags, callToAction);
+        return new GenerationRequest(NO_BRAND, "Family", null, "Notes", list, captions, hashtags, callToAction);
     }
 
     private static GenerationResult result(List<GenerationResult.Caption> captions, List<String> order) {
@@ -43,6 +43,14 @@ class ContentValidatorTest {
         assertThat(content.carouselRationale()).isEqualTo("Cover first.");
         assertThat(content.storyIdeas()).containsExactly("Idea one", "Idea two");
         assertThat(content.warnings()).containsExactly("Check the date.");
+    }
+
+    @Test
+    void keepsAtMostFiveHashtags() {
+        ValidatedContent content = ContentValidator.validate(result(List.of(new GenerationResult.Caption("Caption", null,
+                List.of("a1", "b2", "c3", "d4", "e5", "f6", "g7"))), List.of()), request(1, 1, true, false));
+
+        assertThat(content.captions().getFirst().hashtags()).containsExactly("a1", "b2", "c3", "d4", "e5");
     }
 
     @Test

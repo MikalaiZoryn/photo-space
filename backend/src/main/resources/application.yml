@@ -85,6 +85,13 @@ app:
     provider: ${CONTENT_PROVIDER:mock}
     max-photos: 10
     mock-delay: 2s
+    # Session plans (Milestone 13): proposed once no new photo has become ready for settle-after.
+    plans:
+      enabled: ${CONTENT_PLANS_ENABLED:true}
+      settle-after: ${CONTENT_PLANS_SETTLE_AFTER:30m}
+      lookback: 3d
+      interval: 1m
+      max-photos: 20
     anthropic:
       # Required with the anthropic provider. Never commit it; see .env.example.
       api-key: ${ANTHROPIC_API_KEY:}

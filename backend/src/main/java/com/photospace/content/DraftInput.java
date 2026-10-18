@@ -10,7 +10,7 @@ import java.util.List;
 record DraftInput(
         @NotBlank @Size(max = 2200) String caption,
         @Size(max = 300) String callToAction,
-        @NotNull @Size(max = 30) List<String> hashtags) {
+        @NotNull @Size(max = ContentPrompt.MAX_HASHTAGS) List<String> hashtags) {
 
     DraftInput {
         caption = Text.strip(caption);

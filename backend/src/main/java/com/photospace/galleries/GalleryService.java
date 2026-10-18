@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,14 +46,16 @@ class GalleryService {
     private final AssetService assets;
     private final GalleryProperties properties;
     private final AuditService audit;
+    private final ApplicationEventPublisher events;
 
     GalleryService(JdbcClient jdbc, PhotoSessionService sessions, AssetService assets, GalleryProperties properties,
-            AuditService audit) {
+            AuditService audit, ApplicationEventPublisher events) {
         this.jdbc = jdbc;
         this.sessions = sessions;
         this.assets = assets;
         this.properties = properties;
         this.audit = audit;
+        this.events = events;
     }
 
     /** Creates an empty draft gallery for a session that is not archived. */
@@ -185,6 +188,8 @@ class GalleryService {
         audit.record(workspace,
                 target == GalleryStatus.PUBLISHED ? AuditAction.GALLERY_PUBLISHED : AuditAction.GALLERY_UNPUBLISHED,
                 AuditTarget.GALLERY, galleryId, null);
+        events.publishEvent(new GalleryStatusChanged(workspace.workspaceId(), galleryId, gallery.sessionId(), target,
+                Instant.now()));
         return get(workspace, galleryId);
     }
 

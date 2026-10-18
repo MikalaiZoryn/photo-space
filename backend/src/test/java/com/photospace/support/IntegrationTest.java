@@ -31,7 +31,9 @@ import org.springframework.context.annotation.Import;
             "app.jobs.worker.wait-time=1s",
             "app.jobs.retry.max-attempts=3",
             "app.jobs.retry.base-delay=100ms",
-            "app.jobs.retry.max-delay=400ms"
+            "app.jobs.retry.max-delay=400ms",
+            // Tests propose plans by calling the scheduler themselves.
+            "app.content.plans.interval=1h"
         })
 @Import({
     TestcontainersConfiguration.class,

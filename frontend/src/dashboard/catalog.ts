@@ -20,6 +20,7 @@ export const widgetInfo: Record<WidgetType, WidgetInfo> = {
   GALLERIES: { title: 'Recent galleries', description: 'The newest galleries.', width: 'HALF' },
   RECENT_ACTIVITY: { title: 'Recent activity', description: 'The latest audited changes.', width: 'HALF', ownerOnly: true },
   QUICK_ACTIONS: { title: 'Quick actions', description: 'Shortcuts to create records.', width: 'HALF' },
+  THIS_WEEK_POSTS: { title: "This week's posts", description: 'Planned and posted posts against your weekly goal.', width: 'HALF' },
 }
 
 /** The widgets the member could add: not on the dashboard yet and allowed for their role. */

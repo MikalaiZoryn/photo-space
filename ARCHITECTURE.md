@@ -118,7 +118,8 @@ provider's SDK types leak into domain models.
 -   **galleries:** gallery configuration, share tokens, access rules,
     download events.
 -   **content:** brand profile, AI generation requests, draft versions,
-    approvals.
+    approvals, and the Content Studio: settings, session plans, planned
+    posts with their photos and crops, and the post kit (D22).
 -   **tasks:** task creation, assignment, due dates, status.
 -   **dashboard:** each member's own dashboard layout (which widgets,
     in what order, at what width). The widgets read their data from
@@ -261,6 +262,19 @@ Suggested tables (fields are indicative; refine during implementation):
     approval time. `content_draft_versions` holds every version's
     caption, call to action, and hashtags, with its source (`GENERATED`
     or `EDITED`) and editor. (Implemented in Milestone 6; see D16.)
+-   `content_studio_settings`: one per workspace: weekly goal,
+    automatic plans on or off, the plan template (sneak peek day,
+    number and spacing of later posts), studio area, version.
+    `content_batches.kind` tells caption batches from `PLAN` batches.
+-   `content_plans`: one per session: origin (`AUTOMATIC`, `MANUAL`),
+    its latest `PLAN` batch, and the day the session's gallery was
+    first published. `content_posts`: plan, session, draft (the post's
+    text), stage (`SNEAK_PEEK`, `DELIVERY`, `DRIP`), format (`SINGLE`,
+    `CAROUSEL`, `REEL`, `STORY`), Reel or Story notes, offset from its
+    anchor, planned day, posted day and link and who marked it,
+    `touched`, rewrite state, version. `content_post_photos` holds the
+    photos in posting order with an optional 4:5 crop. (Milestone 13;
+    see D22.)
 -   `integration_connections`: `id`, `workspace_id`, provider, encrypted
     token reference, granted scopes, connection status, sync cursor,
     timestamps.
@@ -441,6 +455,13 @@ adapter. D16 records what is sent to the provider (selected photo
 previews without metadata, the notes the photographer types, the
 session type, and the brand profile; never client details), the
 validation rules, retries, and versioned, human-approved drafts.
+
+Milestone 13 adds `plan` to the same interface: the provider fills
+slots that code defines (stage, format, photo counts) with photos and
+text, `PlanValidator` checks the answer, and code sets every date. A
+plan sends the same kinds of data as a caption batch plus the studio
+area from the Content Studio settings, never session notes or client
+details (D22).
 
 ## 11. Gmail and Google Calendar integrations
 

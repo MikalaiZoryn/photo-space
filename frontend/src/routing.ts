@@ -16,8 +16,11 @@ export type Route =
   | { page: 'clientEdit'; id: string }
   | { page: 'galleries' }
   | { page: 'gallery'; id: string }
-  | { page: 'content' }
+  | { page: 'content'; view: ContentView }
   | { page: 'contentBatch'; id: string }
+  | { page: 'contentPlan'; sessionId: string }
+  | { page: 'contentPost'; id: string }
+  | { page: 'contentPostKit'; id: string }
   | { page: 'tasks' }
   | { page: 'taskNew'; sessionId: string | null }
   | { page: 'taskEdit'; id: string }
@@ -29,7 +32,11 @@ export type Route =
   | { page: 'inquiryForm' }
   | { page: 'branding' }
   | { page: 'settings' }
-  | { page: 'contentStudio' }
+  | { page: 'contentStudioSettings' }
+
+/** The views of the Content Studio page. */
+export const CONTENT_VIEWS = ['calendar', 'review', 'posts', 'captions'] as const
+export type ContentView = (typeof CONTENT_VIEWS)[number]
 
 export function parseRoute(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#\/?/, '').split('?')
@@ -51,8 +58,13 @@ export function parseRoute(hash: string): Route {
     return { page: 'galleries' }
   }
   if (section === 'content') {
+    const [, , , extra] = path.split('/').map(decodeURIComponent)
     if (id === 'batches' && action) return { page: 'contentBatch', id: action }
-    return { page: 'content' }
+    if (id === 'plans' && action) return { page: 'contentPlan', sessionId: action }
+    if (id === 'posts' && action && extra === 'kit') return { page: 'contentPostKit', id: action }
+    if (id === 'posts' && action) return { page: 'contentPost', id: action }
+    const view = new URLSearchParams(query).get('view')
+    return { page: 'content', view: CONTENT_VIEWS.find((v) => v === view) ?? 'calendar' }
   }
   if (section === 'tasks') {
     if (id === 'new') return { page: 'taskNew', sessionId: new URLSearchParams(query).get('session') }
@@ -69,7 +81,7 @@ export function parseRoute(hash: string): Route {
   if (section === 'activity') return { page: 'activity' }
   if (section === 'members') return { page: 'members' }
   if (section === 'settings') {
-    if (id === 'content-studio') return { page: 'contentStudio' }
+    if (id === 'content-studio') return { page: 'contentStudioSettings' }
     return { page: 'settings' }
   }
   return { page: 'dashboard' }
@@ -87,8 +99,11 @@ export const paths = {
   clientEdit: (id: string) => `#/clients/${encodeURIComponent(id)}/edit`,
   galleries: () => '#/galleries',
   gallery: (id: string) => `#/galleries/${encodeURIComponent(id)}`,
-  content: () => '#/content',
+  content: (view?: ContentView) => (view && view !== 'calendar' ? `#/content?view=${view}` : '#/content'),
   contentBatch: (id: string) => `#/content/batches/${encodeURIComponent(id)}`,
+  contentPlan: (sessionId: string) => `#/content/plans/${encodeURIComponent(sessionId)}`,
+  contentPost: (id: string) => `#/content/posts/${encodeURIComponent(id)}`,
+  contentPostKit: (id: string) => `#/content/posts/${encodeURIComponent(id)}/kit`,
   tasks: () => '#/tasks',
   taskNew: (sessionId?: string) => (sessionId ? `#/tasks/new?session=${encodeURIComponent(sessionId)}` : '#/tasks/new'),
   taskEdit: (id: string) => `#/tasks/${encodeURIComponent(id)}/edit`,
@@ -100,7 +115,7 @@ export const paths = {
   inquiryForm: () => '#/inquiry-form',
   branding: () => '#/branding',
   settings: () => '#/settings',
-  contentStudio: () => '#/settings/content-studio',
+  contentStudioSettings: () => '#/settings/content-studio',
 }
 
 /**

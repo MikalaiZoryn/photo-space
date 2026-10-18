@@ -14,4 +14,7 @@ public interface ContentGenerationProvider {
     String model();
 
     GenerationResult generate(GenerationRequest request);
+
+    /** Writes the posts of a session plan; {@link PlanValidator} checks the result. */
+    PlanResult plan(PlanRequest request);
 }

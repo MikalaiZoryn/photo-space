@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button'
 import { actionLabels, targetHref } from '../activity/labels.ts'
 import { listAuditEvents } from '../api/audit.ts'
 import type { Page } from '../api/client.ts'
-import { listBatches } from '../api/content.ts'
+import { getStudioSettings, listBatches, listPosts } from '../api/content.ts'
+import { addDays, countsTowardGoal, todayIn, weekStart } from '../content/calendar.ts'
+import { postStatusLabels, postStatusTones, formatLabels } from '../content/labels.ts'
 import { listGalleries } from '../api/galleries.ts'
 import { listInquiries } from '../api/inquiries.ts'
 import { getInquiryForm, hostedUrl } from '../api/inquiryForm.ts'
@@ -194,6 +196,60 @@ export function ContentToReview({ workspaceId, timezone }: WidgetProps) {
         />
       )}
     </WidgetList>
+  )
+}
+
+/** The feed posts of this week against the weekly goal, then each post planned or posted this week. */
+export function ThisWeekPosts({ workspaceId, timezone }: WidgetProps) {
+  const from = weekStart(todayIn(timezone))
+  const data = useLoad(
+    (signal) =>
+      Promise.all([
+        getStudioSettings(workspaceId, signal),
+        listPosts(workspaceId, { from, to: addDays(from, 6), size: 50 }, signal),
+      ]),
+    [workspaceId, from],
+  )
+  if (data.state.kind === 'loading') {
+    return (
+      <div className="px-4">
+        <Loading>Loading this week&apos;s posts…</Loading>
+      </div>
+    )
+  }
+  if (data.state.kind === 'error') {
+    return (
+      <div className="p-4">
+        <LoadError error={data.state.error} what="this week's posts" onRetry={data.reload} />
+      </div>
+    )
+  }
+  const [settings, posts] = data.state.value
+  const ready = posts.items.filter((post) => countsTowardGoal(post) && post.status !== 'PROPOSED').length
+  return (
+    <div>
+      <p className="px-4 pt-3 text-sm">
+        <span className="font-semibold">
+          {ready} of {settings.weeklyGoal}
+        </span>{' '}
+        <span className="text-muted-foreground">feed posts approved or posted this week</span>
+      </p>
+      {posts.items.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-muted-foreground">Nothing planned this week.</p>
+      ) : (
+        <ul className="divide-y">
+          {posts.items.slice(0, ROWS).map((post) => (
+            <RecordRow
+              key={post.id}
+              href={paths.contentPost(post.id)}
+              title={`${formatLabels[post.format]} · ${post.sessionTitle}`}
+              meta={formatDay(post.postedOn ?? post.plannedOn ?? from)}
+              trailing={<StatusBadge tone={postStatusTones[post.status]}>{postStatusLabels[post.status]}</StatusBadge>}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 

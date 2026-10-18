@@ -503,6 +503,79 @@ CAPTCHA, new notification provider, email verification of submitters
 -   No microservice extraction is performed without a documented
     operational reason.
 
+## Milestone 13 --- Content Studio: session plans, calendar, and post kit
+
+Scheduled next, ahead of Milestones 10 to 12, at the user's request
+(2026-10-17). The number is kept so earlier references stay valid.
+
+Turns one session into a planned run of Instagram posts instead of one
+batch of captions. Based on the research and plan in the "Instagram
+Content from Session Photos" doc: photographers post a sneak peek and
+then little else, while 3--5 feed posts a week is the reach sweet spot.
+
+### Tasks
+
+-   Add a top-level **Content Studio** page that replaces the current
+    Content page: calendar with a weekly cadence meter and gap warnings,
+    plans awaiting review, every post by status (proposed, approved,
+    scheduled, posted), and caption-check chips on each draft. The
+    session page links to that session's plan.
+-   Extend **Settings → Content Studio** with workspace configuration
+    that persists across sessions: weekly posting goal (default 4),
+    automatic plan proposals (on by default), plan template (sneak peek
+    window, drip post count and spacing), and the studio area used by
+    the location check. The brand profile stays there.
+-   Propose a session content plan automatically, once per session, when
+    its photos are ready: no new photo has become `READY` for 30
+    minutes. Run it as an idempotent job with bounded retries. Photos
+    added later never rewrite a plan; the page offers "Refresh plan".
+-   A plan holds typed posts, each with its photos, caption, stage, and
+    planned date: sneak peek (1--3 photos, within 72 hours), delivery
+    story carousel (5--10 photos) and Reel concept (frame order, cover,
+    on-screen text, audio mood), and 4--8 drip posts. Carousels stay at
+    10 photos or fewer. Reuse the existing batch, draft, and version
+    model.
+-   Key delivery and drip dates to the session's gallery being
+    published. Until then they show as "after gallery is published";
+    publishing fixes the dates and puts them on the calendar.
+-   The photographer can drop, add, reorder, retime, and regenerate a
+    single post, and must approve each post before it reaches the
+    calendar or the post kit.
+-   Add a phone-first post kit for each approved post: photos in order,
+    download all or one, copy caption and hashtags, Reel/Story notes,
+    and "Mark as posted" with the date and an optional post link.
+-   Add an adjustable 4:5 crop per post photo (option C in the doc):
+    default centre crop, a draggable 4:5 box before approval, export as
+    a 1080×1350 derivative that follows the stored crop, and the
+    original always downloadable. Originals are never modified; exports
+    use short-lived presigned URLs.
+-   Add deterministic caption checks: at most 5 hashtags (blocks saving;
+    lower the `DraftInput` limit from 30 and keep older drafts
+    readable), location and session type named, exactly one call to
+    action, a "send to" tip, and the existing 2,200-character limit.
+    Align the AI prompt with the same rules.
+-   Add a "This week's posts" dashboard widget from the same data.
+
+### Acceptance criteria
+
+-   When a session's photos settle, a plan is proposed once, even if the
+    trigger fires more than once; turning proposals off in Settings
+    stops it.
+-   Publishing the session's gallery puts its approved delivery and
+    drip posts on the calendar with fixed dates.
+-   Nothing reaches the calendar or post kit without approval, and
+    nothing is posted to Instagram by the system.
+-   The cadence meter counts posted and planned posts against the
+    workspace goal in the workspace time zone and flags empty weeks.
+-   Post kit downloads follow the stored crop; the original is
+    unchanged and still downloadable.
+-   A draft with more than 5 hashtags cannot be saved; other checks show
+    as warnings.
+-   Plans, posts, crops, and settings are workspace-owned, with
+    cross-workspace denial tests for each.
+-   Plan generation works with the mock AI provider locally and in
+    tests.
+
 ## 4. Cross-cutting Definition of Done
 
 A task is complete only when applicable items are satisfied:
@@ -1720,3 +1793,104 @@ numbered milestone. Decision: D15, amended.
     warning.
 -   **Not verified:** a browser run (no flash on reload, the toggle on
     the mobile menu).
+
+### Milestone 13: code done (2026-10-18; not deployed)
+
+Built ahead of Milestones 10 to 12 at the user's request. Decision: D22.
+Source: the "Instagram Content from Session Photos" research doc and its
+"Content Studio plan" tab (option C for crops, plans proposed
+automatically, a default goal of 4 posts a week, delivery keyed to the
+gallery being published).
+
+-   **Schema:** `V12__content_studio_plans.sql` adds
+    `content_studio_settings`, `content_plans` (one per session),
+    `content_posts`, and `content_post_photos` (posting order, optional
+    4:5 crop); `content_batches.kind` (`CAPTIONS`, `PLAN`), up to 20
+    posts per batch, and a null `created_by` for automatic plans; the
+    `THIS_WEEK_POSTS` dashboard widget.
+-   **Plans** (`content` module): `PlanTemplate` defines the slots from
+    the settings; `ContentGenerationProvider.plan` fills them (mock and
+    Anthropic adapters, prompt `content-plan-v1`); `PlanValidator`
+    enforces photos, formats, carousel and Reel caps, and the 5-hashtag
+    cap. `GeneratePlanJob` stores posts, drafts, and photos in the
+    transaction that ends the batch. Sneak peeks are dated from the
+    plan; delivery and drip posts from the gallery's first publication
+    (`GalleryStatusChanged`, published by `galleries`).
+-   **Automatic proposals:** `PlanProposalScheduler` (every minute)
+    picks sessions whose last photo became ready 30 minutes to 3 days
+    ago, with no plan and automatic plans on. Set
+    `CONTENT_PLANS_SETTLE_AFTER` (for example `1m`) to see one sooner
+    locally; `CONTENT_PLANS_ENABLED=false` turns the poller off.
+-   **Posts:** list by calendar range, status, session, or unscheduled;
+    detail with effective crops and caption rules; set the day; replace
+    photos and crops (an approved post goes back to review); rewrite one
+    caption (`RegeneratePostJob`); add a post; mark as posted with a day
+    and an `https://` link (audited); delete (audited, not when posted);
+    the post kit (approved posts only): 1080×1350 exports rendered from
+    the preview on first request under a key named after the crop, plus
+    the original, as 10-minute links.
+-   **Captions:** `CaptionRules` (hashtag cap, session type, studio
+    area, call to action, "send to" tip) on every draft;
+    `DraftInput` now allows 5 hashtags; caption prompt
+    `instagram-drafts-v2` asks for 3 to 5 and uses the studio area.
+-   **Frontend:** the sidebar's **Content Studio** page (replaces
+    **Content**) with **Calendar** (week and month, cadence bars against
+    the weekly goal, a warning and one-click suggestions for empty
+    weeks, drag to reschedule with pointer or touch), **To review**,
+    **All posts**, and **Caption drafts**; the plan page (progress,
+    retry, refresh, posts by stage, add a post); the post page (reorder,
+    add, and remove photos, the 4:5 crop editor with the 3:4 grid guide
+    and arrow keys, caption editor with rule chips, rewrite, day,
+    posted, delete); the phone-first post kit; **Settings** ›
+    **Content Studio** with the plan and posting settings above the
+    brand profile; a **Content plan** panel on the session page; the
+    **This week's posts** dashboard widget. No new dependencies.
+-   **Docs:** D22; ARCHITECTURE §4, §6, §10; README (API, manual
+    check).
+-   **Verified locally on 2026-10-18:**
+    -   `cd backend && ./mvnw verify`: 95 unit tests and 156 integration
+        tests ran; the only failure, `BackendApplicationIT` still
+        expecting migrations up to V11, was fixed and that class rerun
+        green.
+        -   New unit tests: `PlanTemplateTest` (3), `PlanValidatorTest`
+            (3), `CaptionRulesTest` (4), `CropTest` (4, including the
+            1080×1350 export and no upscaling), plan cases in
+            `ContentPromptTest` and `AnthropicContentProviderTest`, the
+            5-hashtag cap in `ContentValidatorTest`.
+        -   `ContentStudioIT` (9): settings defaults, locking, and
+            validation; an automatic plan once photos settle, exactly
+            once, with what the provider receives (no client details,
+            session title, location, or notes); dates fixed by
+            publishing the gallery; calendar ranges and their cap; not
+            before photos settle, not outside the lookback, not when
+            turned off; crops validated and kept, approval withdrawn,
+            kit exports at 4:5 with working links, posted and unposted
+            with link validation and audit, delete rules; refresh keeps
+            touched posts and leaves their slots out; a one-post rewrite
+            and an added post; a permanent failure and retry; caption
+            batches listed without plans; cross-workspace denial on
+            every new route.
+    -   `cd frontend && npm run lint && npm run typecheck && npm test &&
+        npm run build`: lint and typecheck clean, 128 tests passed (13
+        new in `src/content/ContentStudio.test.tsx`), build succeeded
+        with the bundle warning (576 kB, from 527 kB).
+    -   Against the Compose services (backend with
+        `CONTENT_PLANS_SETTLE_AFTER=1m`): V12 applied to the existing
+        local database; a session seeded through the API with 8 photos
+        got an automatic plan of 11 posts from the mock provider, the
+        sneak peeks dated the next day and the rest waiting for the
+        gallery. The first poll also planned 4 older local sessions
+        whose photos became ready within the 3-day lookback.
+    -   Browser (Chrome on the Windows host): the calendar, **To
+        review**, the plan page, and a post page render; a stray
+        scrollbar on the view tabs was fixed. Thumbnails did not load
+        there because presigned URLs used the LAN address, which the
+        Windows host cannot reach under WSL mirrored networking.
+-   **Not verified:** anything on AWS; a real Anthropic plan; dragging
+    (pointer or touch), the crop editor, and the post kit in a browser
+    with images loading.
+-   **Known gaps:** export objects of replaced crops are not cleaned up;
+    the post kit renders missing exports in the request; there is no
+    per-photo sharing consent yet (backlog idea 6); dragging works with
+    pointer and touch only (the post page sets the day from the
+    keyboard).

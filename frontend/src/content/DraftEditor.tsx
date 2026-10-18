@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import {
   changeDraftStatus,
   getDraft,
+  MAX_HASHTAGS,
   parseHashtags,
   postText,
   updateDraft,
@@ -17,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ErrorText, Field } from '../ui/Field.tsx'
 import { StatusBadge } from '../ui/StatusBadge.tsx'
 import { draftStatusLabels, draftStatusTones } from './labels.ts'
+import { CaptionRules } from './CaptionRules.tsx'
 
 /** Instagram's limit for a whole caption, hashtags included. */
 const MAX_POST = 2200
@@ -47,6 +49,7 @@ export function DraftEditor({ workspaceId, timezone, number, draft, onChange }: 
     edited.callToAction !== draft.callToAction ||
     edited.hashtags.join(' ') !== draft.hashtags.join(' ')
   const length = postText(edited).length
+  const tooManyHashtags = edited.hashtags.length > MAX_HASHTAGS
   const approved = draft.status === 'APPROVED'
 
   async function run(action: () => Promise<ContentDraft>, description: string) {
@@ -113,7 +116,14 @@ export function DraftEditor({ workspaceId, timezone, number, draft, onChange }: 
         <Field label="Call to action" error={error.fields.callToAction}>
           <Input value={callToAction} maxLength={300} onChange={(e) => setCallToAction(e.target.value)} />
         </Field>
-        <Field label="Hashtags" error={error.fields.hashtags}>
+        <Field
+          label="Hashtags"
+          error={
+            error.fields.hashtags ??
+            error.fields['draft.hashtags'] ??
+            (tooManyHashtags ? `Instagram allows at most ${MAX_HASHTAGS} hashtags.` : undefined)
+          }
+        >
           <Input value={hashtags} onChange={(e) => setHashtags(e.target.value)} placeholder="#family #goldenhour" />
         </Field>
       </div>
@@ -130,9 +140,10 @@ export function DraftEditor({ workspaceId, timezone, number, draft, onChange }: 
           ))}
         </ul>
       )}
+      <CaptionRules rules={draft.rules} />
       {error.message && <ErrorText>{error.message}</ErrorText>}
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="secondary" disabled={busy || !dirty}>
+        <Button type="submit" variant="secondary" disabled={busy || !dirty || tooManyHashtags}>
           Save changes
         </Button>
         {approved ? (

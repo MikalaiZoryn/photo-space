@@ -44,6 +44,7 @@ import {
   QuickActions,
   RecentActivity,
   RecentGalleries,
+  ThisWeekPosts,
   UpcomingSessions,
   type WidgetProps,
 } from './Widgets.tsx'
@@ -57,6 +58,7 @@ const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = {
   GALLERIES: RecentGalleries,
   RECENT_ACTIVITY: RecentActivity,
   QUICK_ACTIONS: QuickActions,
+  THIS_WEEK_POSTS: ThisWeekPosts,
 }
 
 /** Where a widget's "View all" link goes, if it has a list page. */
@@ -65,6 +67,7 @@ const viewAll: Partial<Record<WidgetType, string>> = {
   MY_TASKS: paths.tasks(),
   OPEN_INQUIRIES: paths.inquiries(),
   CONTENT_TO_REVIEW: paths.content(),
+  THIS_WEEK_POSTS: paths.content(),
   GALLERIES: paths.galleries(),
   RECENT_ACTIVITY: paths.activity(),
 }
